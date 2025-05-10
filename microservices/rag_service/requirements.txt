@@ -1,0 +1,23 @@
+# Database & Environment
+psycopg2-binary
+python-dotenv
+
+# Document parsing
+python-docx
+pandas
+
+# Embedding / RAG stack
+openai
+chromadb
+langchain
+tiktoken
+tenacity
+numpy
+
+# Web service (optional, for FastAPI endpoints)
+fastapi
+uvicorn[standard]
+pydantic
+
+# CLI & utilities
+tqdm

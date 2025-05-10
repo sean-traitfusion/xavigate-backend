@@ -1,0 +1,46 @@
+# Local configuration and environment
+.env
+.env.*
+*.env.local
+*.env.docker
+
+# Docker and dev overrides
+docker-compose.override.yml
+docker-compose.yml
+Dockerfile
+
+# Docker runtime and intermediate artifacts
+*.pid
+*.sock
+*.log
+*.db
+pgdata/
+chroma_db/
+
+# Memory + session files
+backend/memory/data/*.json
+backend/memory/data/*.jsonl
+
+# Embedding cache
+data/embedding_cache.json
+shared/cache/embedding_cache.json
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# FastAPI / test / mypy cache
+**/.mypy_cache/
+**/.pytest_cache/
+
+# Local dev UI kits or test assets
+xavigate-ui-kit/
+frontend/serve.log
+php-dashboard/test.php
+restart.sh
+
+# SQLite, build artifacts
+*.sqlite
