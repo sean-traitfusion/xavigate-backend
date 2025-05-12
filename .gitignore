@@ -44,3 +44,6 @@ restart.sh
 
 # SQLite, build artifacts
 *.sqlite
+# Exclude chat_service .env from ignore so we can include a template
+!microservices/chat_service/.env
+!microservices/auth_service/.env
