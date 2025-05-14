@@ -1,7 +1,6 @@
 # Local configuration and environment
 # Ignore all .env files except project root
 *.env
-!/.env
 .env.*
 *.env.local
 *.env.docker
