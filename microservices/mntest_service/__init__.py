@@ -1,0 +1,1 @@
+# Initialization for mntest_service package

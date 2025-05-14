@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from storage_service.memory.storage import load_user_profile, save_user_profile
+from memory.storage import load_user_profile, save_user_profile
 
 router = APIRouter()
 

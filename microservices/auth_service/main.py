@@ -3,8 +3,13 @@ from fastapi import FastAPI
 import os
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from typing import Optional
 
-load_dotenv()
+# Load root and service .env for unified configuration
+root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+load_dotenv(dotenv_path=root_env, override=False)
+service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(dotenv_path=service_env, override=True)
 # ENV mode: 'dev' or 'prod'
 ENV = os.getenv("ENV", "dev")
 # Static API key (for legacy or dev use)
@@ -78,7 +83,10 @@ class VerifyRequest(BaseModel):
     key: str
 
 class VerifyResponse(BaseModel):
+    # Whether the key or JWT is valid
     valid: bool
+    # Cognito subject (sub claim) when token is valid
+    sub: Optional[str] = None
 
 @app.post(
     "/verify",
@@ -89,12 +97,13 @@ async def verify(request: VerifyRequest):
     """
     Verify that the provided API key (X-XAVIGATE-KEY) is valid.
     """
-    # Development mode: simple stub
+    # Development mode: skip validation, accept any token
     if ENV == "dev":
-        return VerifyResponse(valid=(request.key == API_KEY))
+        return VerifyResponse(valid=True, sub=None)
     # Production mode: verify as Cognito JWT
     try:
-        verify_cognito_token(request.key)
-        return VerifyResponse(valid=True)
+        claims = verify_cognito_token(request.key)
+        # Return sub claim so downstream services know the user ID
+        return VerifyResponse(valid=True, sub=claims.get("sub"))
     except Exception:
-        return VerifyResponse(valid=False)
+        return VerifyResponse(valid=False, sub=None)

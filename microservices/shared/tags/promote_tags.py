@@ -1,6 +1,6 @@
 # backend/tags/promote_tags.py
 from typing import List
-from storage_service.memory.models import AlignmentTag
+from memory.models import AlignmentTag
 from datetime import datetime
 from collections import Counter
 

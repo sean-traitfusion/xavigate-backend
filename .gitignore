@@ -47,3 +47,5 @@ restart.sh
 # Exclude chat_service .env from ignore so we can include a template
 !microservices/chat_service/.env
 !microservices/auth_service/.env
+!microservices/chat_service/.env
+!microservices/mntest_service/.env

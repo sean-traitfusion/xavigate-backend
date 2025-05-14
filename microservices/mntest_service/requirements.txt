@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+httpx
+# no-op: using in-memory store for MVP
+psycopg2-binary

@@ -33,7 +33,7 @@ if USE_DB:
 DATA_DIR = Path("backend/memory/data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-from storage_service.session.session_state import PromptExchange
+from session.session_state import PromptExchange
 
 def get_session_memory(user_id: str) -> dict:
     filepath = DATA_DIR / f"user_{user_id}.json"

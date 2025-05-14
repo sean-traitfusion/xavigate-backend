@@ -27,7 +27,11 @@ import traceback
 
 
 
-load_dotenv()
+# Load root and service .env for unified configuration
+root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+load_dotenv(dotenv_path=root_env, override=False)
+service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(dotenv_path=service_env, override=True)
 print("🚀 API_KEY from env:", os.getenv("XAVIGATE_KEY"))
 API_KEY = os.getenv("XAVIGATE_KEY")
 

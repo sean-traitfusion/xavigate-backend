@@ -13,10 +13,7 @@ async def verify_key(key: str) -> bool:
     """
     Verify API key via auth service, or stub in development.
     """
-    # In development, accept any non-empty key
-    if os.getenv("ENV", "dev") == "dev":
-        return bool(key and key.strip())
-    # In production, call auth service
+    # Always verify API key via auth service
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
@@ -32,9 +29,6 @@ async def rag_query(prompt: str, top_k: int = 3, tags: str | None = None) -> str
     """
     Query the RAG service for context documents.
     """
-    # In development, return a stubbed answer
-    if os.getenv("ENV", "dev") == "dev":
-        return f"[stub answer for prompt: '{prompt}']"
     params: dict[str, str | int] = {"prompt": prompt, "top_k": top_k}
     if tags:
         params["tags"] = tags

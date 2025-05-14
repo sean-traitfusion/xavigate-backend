@@ -21,6 +21,10 @@ def get_connection():
     retries = int(os.getenv("DB_CONNECT_MAX_RETRIES", "10"))
     delay = float(os.getenv("DB_CONNECT_RETRY_INTERVAL", "2"))
     last_error = None
+    # If a DATABASE_URL is provided, use it directly
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return psycopg2.connect(database_url)
     for attempt in range(1, retries + 1):
         try:
             return psycopg2.connect(**DB_CONFIG)

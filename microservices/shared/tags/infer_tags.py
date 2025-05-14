@@ -1,6 +1,6 @@
 # backend/tags/infer_tags.py
 from typing import List, Dict
-from storage_service.memory.models import AlignmentTag
+from memory.models import AlignmentTag
 from datetime import datetime
 
 def infer_alignment_tags(

@@ -5,6 +5,10 @@ from fastapi.testclient import TestClient
 
 # Ensure chat_service folder is on PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)))
+import main
+# Stub out external calls for contract tests
+main.verify_key = lambda token: True
+main.rag_query = lambda prompt, top_k=None, tags=None: "stub response"
 from main import app
 
 client = TestClient(app)
@@ -15,17 +19,19 @@ def test_openapi_json():
     data = response.json()
     # Ensure basic OpenAPI structure
     assert "paths" in data
-    assert "/chat" in data["paths"]
+    assert "/query" in data["paths"]
 
 def test_chat_success():
     payload = {
-        "prompt": "Hello, world!",
-        "user_id": "user1",
-        "top_k": 2,
-        "tags": "tag1,tag2"
+        "userId": "user1",
+        "username": "user1",
+        "fullName": "User One",
+        "traitScores": {"creative": 8.0},
+        "message": "Hello, world!",
+        "sessionId": "session1"
     }
-    headers = {"X-XAVIGATE-KEY": "valid_key"}
-    response = client.post("/chat", json=payload, headers=headers)
+    headers = {"Authorization": "Bearer valid_key"}
+    response = client.post("/query", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
     # Expected response shape
@@ -36,10 +42,16 @@ def test_chat_success():
     assert isinstance(data.get("followup"), str)
 
 def test_chat_unauthorized():
-    payload = {"prompt": "Test without key"}
-    # Provide empty key to trigger verify_key == False
-    headers = {"X-XAVIGATE-KEY": ""}
-    response = client.post("/chat", json=payload, headers=headers)
+    payload = {
+        "userId": "user1",
+        "username": "user1",
+        "traitScores": {"creative": 5.0},
+        "message": "Test without token",
+        "sessionId": "session1"
+    }
+    # Missing or invalid Authorization header
+    headers = {"Authorization": ""}
+    response = client.post("/query", json=payload, headers=headers)
     assert response.status_code == 401
     data = response.json()
-    assert data.get("detail") == "Invalid API key"
+    assert data.get("detail") == "Invalid or missing Authorization header"

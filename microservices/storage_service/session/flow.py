@@ -3,8 +3,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 import random
 
-from storage_service.memory.storage import load_user_profile, save_user_profile, save_session_record
-from storage_service.memory.models import SessionRecord
+from memory.storage import load_user_profile, save_user_profile, save_session_record
+from memory.models import SessionRecord
 from shared.metrics.scoring_tas_sas import score_tas, score_sas
 from shared.metrics.scoring_ass import score_ass
 from shared.tags.infer_tags import infer_alignment_tags

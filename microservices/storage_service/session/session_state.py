@@ -1,5 +1,5 @@
 from typing import Optional, List
-from storage_service.memory.models import SessionRecord, UserProfile, AlignmentTag, AvatarProfile
+from memory.models import SessionRecord, UserProfile, AlignmentTag, AvatarProfile
 from pydantic import BaseModel
 
 class PromptExchange(BaseModel):

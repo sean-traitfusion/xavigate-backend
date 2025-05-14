@@ -1,7 +1,7 @@
 # backend/session/session_routes.py
 from fastapi import APIRouter
 from pydantic import BaseModel
-from storage_service.session.flow import handle_reflection
+from session.flow import handle_reflection
 
 router = APIRouter()
 

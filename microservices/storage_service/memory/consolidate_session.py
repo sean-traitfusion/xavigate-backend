@@ -1,5 +1,5 @@
 # /backend/memory/consolidate_session.py
-from storage_service.memory.models import UserMemory
+from memory.models import UserMemory
 from uuid import UUID
 import json
 
