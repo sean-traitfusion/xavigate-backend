@@ -13,7 +13,7 @@ import psycopg2.extras
 from dotenv import load_dotenv
 load_dotenv()
 
-USE_DB = os.getenv("ENV") != "dev"
+USE_DB = os.getenv("ENV", "dev") != "dev"
 
 if USE_DB:
     

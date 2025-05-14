@@ -85,6 +85,9 @@ async def chat_endpoint(
     authorization: str | None = Header(None, alias="Authorization"),
     _=Depends(require_jwt),
 ):
+    # Stub response in dev mode to avoid real OpenAI calls
+    if os.getenv("ENV", "dev") == "dev":
+        return ChatResponse(answer="Dev stub response", sources=[], plan={}, critique="", followup="")
     # Extract token for downstream calls (empty in dev)
     token = authorization.split(" ", 1)[1] if authorization else ""
 

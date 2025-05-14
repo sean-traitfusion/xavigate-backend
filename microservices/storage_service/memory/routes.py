@@ -10,9 +10,9 @@ import json
 
 from dotenv import load_dotenv
 # Load root and service .env for unified configuration
-root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 load_dotenv(dotenv_path=root_env, override=False)
-service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
+service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
 load_dotenv(dotenv_path=service_env, override=True)
 ENV = os.getenv("ENV", "dev")
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8014")
@@ -38,7 +38,7 @@ def require_jwt(authorization: str | None = Header(None, alias="Authorization"))
 
 router = APIRouter(dependencies=[Depends(require_jwt)])
 print("✅ memory_routes.py loaded")
-print("🌍 ENV =", os.getenv("ENV"))
+print("🌍 ENV =", ENV)
 
 import psycopg2
 from db_service.db import get_connection
@@ -51,11 +51,7 @@ if ENV != "dev":
     conn.autocommit = True
     cursor = conn.cursor()
 
-    ## === SCHEMA CREATION ===
-    # Drop existing tables and create schema
-    cursor.execute("DROP TABLE IF EXISTS memory_summary;")
-    cursor.execute("DROP TABLE IF EXISTS session_memory;")
-    cursor.execute("DROP TABLE IF EXISTS user_memory;")
+    # Create tables if not exists
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS session_memory (
         uuid TEXT PRIMARY KEY,
@@ -65,7 +61,7 @@ if ENV != "dev":
         interim_scores JSONB,
         expires_at TIMESTAMP
     );
-    """")
+    """)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS user_memory (
         uuid TEXT PRIMARY KEY,
@@ -76,9 +72,8 @@ if ENV != "dev":
         created_at TIMESTAMP DEFAULT NOW(),
         last_updated TIMESTAMP DEFAULT NOW()
     );
-    """")
-
-    # === SESSION SUMMARY TABLE ===
+    """)
+    # Session summary table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS memory_summary (
         summary_id SERIAL PRIMARY KEY,
@@ -87,7 +82,7 @@ if ENV != "dev":
         full_transcript JSONB,
         created_at TIMESTAMP DEFAULT NOW()
     );
-    """")
+    """)
 
 
 # === MODELS ===

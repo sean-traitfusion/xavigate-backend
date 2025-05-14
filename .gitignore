@@ -1,13 +1,13 @@
 # Local configuration and environment
-.env
+# Ignore all .env files except project root
+*.env
+!/.env
 .env.*
 *.env.local
 *.env.docker
 
-# Docker and dev overrides
+# Local Docker override files
 docker-compose.override.yml
-docker-compose.yml
-Dockerfile
 
 # Docker runtime and intermediate artifacts
 *.pid
@@ -44,8 +44,3 @@ restart.sh
 
 # SQLite, build artifacts
 *.sqlite
-# Exclude chat_service .env from ignore so we can include a template
-!microservices/chat_service/.env
-!microservices/auth_service/.env
-!microservices/chat_service/.env
-!microservices/mntest_service/.env
