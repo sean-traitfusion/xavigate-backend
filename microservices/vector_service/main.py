@@ -14,6 +14,10 @@ load_dotenv(dotenv_path=root_env, override=False)
 service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
 load_dotenv(dotenv_path=service_env, override=True)
 
+# Determine environment
+ENV = os.getenv("ENV", "dev")
+root_path = "/api/vector" if ENV == "prod" else ""
+
 # Embedding and Chroma client imports
 from embeddings import get_embedding
 from chromadb import PersistentClient
@@ -39,8 +43,13 @@ app = FastAPI(
     title="Vector Search Service",
     description="Retrieves relevant MN theory chunks via vector search",
     version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    swagger_ui_parameters={"url": "openapi.json"},
+    root_path=root_path,
 )
-ENV = os.getenv("ENV", "dev")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

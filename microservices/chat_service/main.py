@@ -23,7 +23,8 @@ async def require_jwt(authorization: str | None = Header(None, alias="Authorizat
 root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 load_dotenv(dotenv_path=root_env, override=False)
 service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
-load_dotenv(dotenv_path=service_env, override=True)
+ENV = os.getenv("ENV", "dev")
+root_path = "/api/chat" if ENV == "prod" else ""
 
 app = FastAPI(
     title="Chat Service",
@@ -32,7 +33,8 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    swagger_ui_parameters={"url": "openapi.json"}
+    swagger_ui_parameters={"url": "openapi.json"},
+    root_path=root_path,
 )
 
 app.add_middleware(

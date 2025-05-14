@@ -31,8 +31,9 @@ services:
     volumes:
       - ./microservices/vector_service:/app
       - ./microservices/shared:/app/shared
-      # Mount existing Chroma DB files for vector search
+      - ./microservices/db_service:/app/db_service
       - ./microservices/rag_service/chroma_db:/app/chroma_db
+      - ./docs:/app/docs
 
   storage_service:
     build:

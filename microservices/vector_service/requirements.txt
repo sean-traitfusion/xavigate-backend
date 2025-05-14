@@ -1,6 +1,26 @@
+# Core API and web framework (if needed)
 fastapi
 uvicorn[standard]
 pydantic
+
+# PostgreSQL support (via db_service)
+psycopg2-binary
 python-dotenv
-chromadb
+
+# LangChain + Text Embedding
 openai
+langchain
+langchain_text_splitters
+tiktoken
+tenacity
+
+# Vector store
+chromadb
+
+# Document parsing
+python-docx
+pandas
+
+# Utilities
+numpy
+tqdm

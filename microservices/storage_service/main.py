@@ -11,6 +11,19 @@ import time
 from threading import Thread
 from memory.routes import expire_session_logic
 from db_service.db import get_connection
+from dotenv import load_dotenv
+
+
+# Load .env from root and service-level
+root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+load_dotenv(dotenv_path=root_env, override=False)
+
+service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(dotenv_path=service_env, override=True)
+
+# Determine environment
+ENV = os.getenv("ENV", "dev")
+root_path = "/api/storage" if ENV == "prod" else ""
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,7 +52,16 @@ async def lifespan(app: FastAPI):
     yield
     # Teardown if needed
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    title="Storage Service",
+    description="Memory and session storage service",
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    swagger_ui_parameters={"url": "openapi.json"},
+    root_path=root_path,)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,4 +81,4 @@ app.include_router(profile_router, prefix="/profile")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "rag"}
+    return {"status": "ok", "service": "storgage"}

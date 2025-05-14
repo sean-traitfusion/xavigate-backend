@@ -16,6 +16,7 @@ service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
 load_dotenv(dotenv_path=service_env, override=True)
 # Environment mode (unused for MNTEST stub)
 ENV = os.getenv("ENV", "dev")
+root_path = "/api/mntest" if ENV == "prod" else ""
 # Auth service URL for token verification
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8014")
 
@@ -39,7 +40,8 @@ _store: Dict[str, Dict[str, float]] = {}
 app = FastAPI(
     title="MN Test Service",
     description="Stores and retrieves MNTEST trait scores",
-    version="0.1.0"
+    version="0.1.0",
+    root_path=root_path,
 )
 app.add_middleware(
     CORSMiddleware,
