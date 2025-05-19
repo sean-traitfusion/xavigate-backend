@@ -4,12 +4,15 @@ from chunking import prepare_chunks
 
 def bulk_chunk_all(base_dir: str):
     base = Path(base_dir)
+    print(f"👀 base dir = {base_dir}")
     all_chunks = []
 
     for folder in base.iterdir():
+        print(f"📁 Found folder candidate: {folder}")
         if folder.is_dir() and folder.name != "glossary":
             print(f"\n📂 Processing folder: {folder.name}")
             for file_path in folder.glob("*"):
+                print(f"🔍 Checking file: {file_path.name} | Suffix: {file_path.suffix.lower()}")
                 if file_path.suffix.lower() in [".docx", ".md", ".jsonl"]:
                     print(f"  📄 {file_path.name}")
                     try:
@@ -29,4 +32,6 @@ def bulk_chunk_all(base_dir: str):
     print(f"✅ Saved all chunks to {output_file}")
 
 if __name__ == "__main__":
-    bulk_chunk_all("data/")
+    import sys
+    path = sys.argv[1] if len(sys.argv) > 1 else "data/"
+    bulk_chunk_all(path)

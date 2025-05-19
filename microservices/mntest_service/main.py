@@ -22,12 +22,15 @@ AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8014")
 
 # JWT authentication dependency
 async def require_jwt(authorization: str | None = Header(None, alias="Authorization")):
+    print("🔐 Incoming Authorization header:", authorization)
     # In dev mode, skip auth if header missing
     if ENV == "dev":
         return
     # In prod, require valid Bearer token
     if not authorization or not authorization.startswith("Bearer "):
+        print(f"📡 Calling auth service at {AUTH_SERVICE_URL}/verify")
         raise HTTPException(status_code=401, detail="Unauthorized")
+        print("🧾 Auth service response:", resp.status_code, await resp.aread())
     token = authorization.split(" ", 1)[1]
     async with httpx.AsyncClient() as client:
         resp = await client.post(f"{AUTH_SERVICE_URL}/verify", json={"key": token})
@@ -89,7 +92,7 @@ async def health():
     return {"status": "ok", "service": "mntest"}
 
 @app.post(
-    "/mntest/submit",
+    "/submit",
     response_model=MNSubmitResponse,
     tags=["mntest"],
 )
@@ -119,7 +122,7 @@ async def submit_mntest(
     return MNSubmitResponse(status="ok")
 
 @app.get(
-    "/mntest/result",
+    "/result",
     response_model=MNResultResponse,
     tags=["mntest"],
 )

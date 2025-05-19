@@ -42,4 +42,6 @@ php-dashboard/test.php
 restart.sh
 
 # SQLite, build artifacts
-*.sqlite
+*.sqlitemicroservices/vector_service/maintenance/bulk_chunks_all_cleaned.jsonl
+microservices/vector_service/maintenance/bulk_chunks_all.jsonl
+*.env

@@ -8,9 +8,19 @@ import openai
 import httpx
 from client import verify_key
 
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://nginx:8080/api/auth")
+
+async def verify_key(token: str) -> bool:
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{AUTH_SERVICE_URL}/verify", json={"key": token})
+            return resp.status_code == 200 and resp.json().get("valid", False)
+    except Exception as e:
+        print("❌ Auth verification failed:", e)
+        return False
+
 # JWT authentication dependency
 async def require_jwt(authorization: str | None = Header(None, alias="Authorization")):
-    # In dev mode, skip authentication if header missing
     if os.getenv("ENV", "dev") == "dev":
         return
     if not authorization or not authorization.startswith("Bearer "):

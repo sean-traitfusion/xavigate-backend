@@ -4,7 +4,9 @@ import os
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
+import builtins
 
+print = lambda *args, **kwargs: builtins.print(*args, **kwargs, flush=True)
 # Load root and service .env for unified configuration
 root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 load_dotenv(dotenv_path=root_env, override=False)
@@ -38,36 +40,44 @@ def get_jwks() -> list[dict]:
     return _JWKS_CACHE
 
 def verify_cognito_token(token: str) -> dict:
-    # Decode header to get kid
     headers = jwt.get_unverified_header(token)
     kid = headers.get("kid")
     if not kid:
+        print("❌ No kid in token header")
         raise ValueError("Invalid token header: no 'kid'")
-    # Fetch JWKs and find matching key
+
     keys = get_jwks()
     key_index = next((i for i, k in enumerate(keys) if k.get("kid") == kid), None)
     if key_index is None:
+        print("❌ kid not found in JWKS")
         raise ValueError("Public key not found in JWKS")
+
     public_key = jwk.construct(keys[key_index])
-    # Verify signature
     message, encoded_sig = token.rsplit('.', 1)
     decoded_sig = base64url_decode(encoded_sig.encode('utf-8'))
     if not public_key.verify(message.encode('utf-8'), decoded_sig):
+        print("❌ Signature verification failed")
         raise ValueError("Signature verification failed")
-    # Validate claims
+
     claims = jwt.get_unverified_claims(token)
-    # Check expiration
+    print("🔍 Token claims received:", claims)
+
     if time.time() > claims.get('exp', 0):
+        print("❌ Token expired:", claims.get('exp'))
         raise ValueError("Token is expired")
-    # Check audience (app client id)
+
     aud = claims.get('aud') or claims.get('client_id')
     if aud != COGNITO_APP_CLIENT_ID:
+        print(f"❌ Audience mismatch: got {aud}, expected {COGNITO_APP_CLIENT_ID}")
         raise ValueError("Token was not issued for this audience")
-    # Check issuer
+
     iss = claims.get('iss')
     expected_iss = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}"
     if iss != expected_iss:
+        print(f"❌ Issuer mismatch: got {iss}, expected {expected_iss}")
         raise ValueError("Invalid issuer")
+
+    print("✅ Token is valid")
     return claims
 
 app = FastAPI(
@@ -95,22 +105,18 @@ class VerifyResponse(BaseModel):
     response_model=VerifyResponse,
     tags=["auth"],
 )
+@app.post("/verify", response_model=VerifyResponse, tags=["auth"])
 async def verify(request: VerifyRequest):
-    """
-    Verify that the provided API key (X-XAVIGATE-KEY) is valid.
-    """
-    # Development mode: skip validation, accept any token
     if ENV == "dev":
         return VerifyResponse(valid=True, sub=None)
 
-    # Temporary override for smoke testing in prod
     if request.key == "foo":
         return VerifyResponse(valid=True, sub="user123")
 
-    # Production mode: verify as Cognito JWT
     try:
         claims = verify_cognito_token(request.key)
-        # Return sub claim so downstream services know the user ID
+        print("🟣 Final result:", claims)
         return VerifyResponse(valid=True, sub=claims.get("sub"))
-    except Exception:
+    except Exception as e:
+        print("❌ Token validation error:", e)
         return VerifyResponse(valid=False, sub=None)
