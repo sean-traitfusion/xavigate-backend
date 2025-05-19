@@ -1,22 +1,46 @@
 import os
 import openai
-# Load environment variables from root and service .env for unified configuration
+import hashlib
+import json
+from pathlib import Path
 from dotenv import load_dotenv
-root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
-load_dotenv(dotenv_path=root_env, override=False)
-service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
-load_dotenv(dotenv_path=service_env, override=True)
+
+# Load root and service .env for unified configuration
+load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Model for embeddings
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMENSIONS = 1536  # Explicitly set dimensions to match ingestion
+# Point to shared cache under /app/shared
+CACHE_FILE = Path(__file__).parent.parent / "shared/cache/embedding_cache.json"
+
+# Initialize or load embedding cache
+if CACHE_FILE.exists():
+    _cache = json.loads(CACHE_FILE.read_text())
+else:
+    _cache = {}
+
+def _hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 def get_embedding(text: str) -> list[float]:
     """
-    Call OpenAI to get an embedding for the given text.
+    Returns a vector embedding for the given text, using cache when available.
     """
+    key = _hash_text(text)
+    if key in _cache:
+        return _cache[key]
+
     response = openai.embeddings.create(
         model=EMBEDDING_MODEL,
         input=text,
+        dimensions=EMBEDDING_DIMENSIONS  # Explicitly set dimensions
     )
-    return response.data[0].embedding
+    vector = response.data[0].embedding
+    _cache[key] = vector
+    # Persist cache
+    try:
+        CACHE_FILE.write_text(json.dumps(_cache))
+    except Exception:
+        pass
+    return vector

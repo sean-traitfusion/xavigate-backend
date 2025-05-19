@@ -1,3 +1,4 @@
+#rag_service/maintenance/embeddings.py
 import os
 import openai
 import hashlib
@@ -10,6 +11,7 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMENSIONS = 1536  # Explicitly set dimensions to match ingestion
 # Point to shared cache under /app/shared
 CACHE_FILE = Path(__file__).parent.parent / "shared/cache/embedding_cache.json"
 
@@ -32,7 +34,8 @@ def get_embedding(text: str) -> list[float]:
 
     response = openai.embeddings.create(
         model=EMBEDDING_MODEL,
-        input=text
+        input=text,
+        dimensions=EMBEDDING_DIMENSIONS  # Explicitly set dimensions
     )
     vector = response.data[0].embedding
     _cache[key] = vector
