@@ -7,7 +7,7 @@ import httpx
 from dotenv import load_dotenv
 from datetime import datetime
 # Database connection
-from db_service.db import get_connection
+from shared.db import get_connection
 
 # Load root and service .env for unified configuration
 root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
@@ -141,7 +141,7 @@ async def get_mntest_result(
         cur.close()
         conn.close()
         if not rec:
-            raise HTTPException(status_code=404, detail="MNTEST scores not found for user")
+            raise HTTPException(status_code=200, detail="MNTEST scores not found for user")
         scores = rec[0]
     except HTTPException:
         raise

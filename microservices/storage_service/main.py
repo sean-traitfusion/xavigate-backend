@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import time
 from threading import Thread
 from memory.routes import expire_session_logic
-from db_service.db import get_connection
+from shared.db import get_connection
 from dotenv import load_dotenv
 
 

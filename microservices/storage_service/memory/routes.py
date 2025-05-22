@@ -41,7 +41,7 @@ print("✅ memory_routes.py loaded")
 print("🌍 ENV =", ENV)
 
 import psycopg2
-from db_service.db import get_connection
+from shared.db import get_connection
 ## In-memory store for dev mode
 DEV_SESSION_STORE: dict[str, list[dict]] = {}
 DEV_SUMMARIES: dict[str, dict] = {}

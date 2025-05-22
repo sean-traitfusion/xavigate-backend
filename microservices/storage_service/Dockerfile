@@ -10,4 +10,4 @@ COPY . .
 # Environment variables
 ENV PYTHONPATH=/app
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011"]
+ENTRYPOINT ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port 8011"]

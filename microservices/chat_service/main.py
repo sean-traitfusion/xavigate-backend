@@ -4,9 +4,11 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
 import os
-import openai
+from openai import OpenAI
 import httpx
 from client import verify_key
+
+openai_client = OpenAI()
 
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://nginx:8080/api/auth")
 
@@ -32,7 +34,10 @@ async def require_jwt(authorization: str | None = Header(None, alias="Authorizat
 # Load root and service .env for unified configuration
 root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 load_dotenv(dotenv_path=root_env, override=False)
+
 service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(dotenv_path=service_env, override=True)
+
 ENV = os.getenv("ENV", "dev")
 root_path = "/api/chat" if ENV == "prod" else ""
 
@@ -105,9 +110,9 @@ async def chat_endpoint(
 
     # Load environment
     STORAGE_URL = os.getenv("STORAGE_URL", "http://localhost:8011")
-    RAG_URL = os.getenv("RAG_URL", "http://localhost:8010")
+    RAG_URL = os.getenv("RAG_URL", "http://localhost:8017")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    openai.api_key = OPENAI_API_KEY
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
     # Prepare headers for internal service calls
     internal_headers: dict = {}
@@ -155,8 +160,8 @@ async def chat_endpoint(
     # 2. Retrieve relevant glossary/context via Vector Search service
     async with httpx.AsyncClient() as client:
         vs_resp = await client.post(
-            f"{os.getenv('RAG_URL')}/vector/search",  # vector_service URL
-            json={"query": req.message, "glossaryType": "mn", "top_k": 5}
+            f"{os.getenv('RAG_URL')}/search",
+            json={"query": req.message, "top_k": 5}  # ✅ No filters
         )
     if vs_resp.status_code != 200:
         raise HTTPException(status_code=500, detail="Failed to fetch glossary chunks")
@@ -190,8 +195,9 @@ async def chat_endpoint(
     final_prompt = "\n".join(prompt_parts)
 
     # 4. Call OpenAI
+    
     try:
-        completion = openai.ChatCompletion.create(
+        completion = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},

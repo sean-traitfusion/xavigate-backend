@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-from db_service.db import get_connection
+from microservices.shared.db import get_connection
 from embeddings import get_embedding
 from chromadb import PersistentClient
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
@@ -11,7 +11,7 @@ import json
 client = PersistentClient(path="chroma_db")
 
 collection = client.get_or_create_collection(
-    name="xavigate_ad",
+    name="xavigate_knowledge",
 )
 
 def get_unembedded_chunks(limit=100):

@@ -4,6 +4,7 @@
 .env.*
 *.env.local
 *.env.docker
+*.jsonl
 
 # Local Docker override files
 docker-compose.override.yml

@@ -1,5 +1,27 @@
 
 services:
+  postgres:
+    image: ankane/pgvector
+    container_name: xavigate_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: xavigate
+      POSTGRES_USER: xavigate_user
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - xavigate
+
+  chroma:
+    image: chromadb/chroma
+    container_name: xavigate_chroma
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - xavigate
   rag_service:
     build:
       context: ./microservices/rag_service
@@ -14,9 +36,10 @@ services:
       - ./microservices/rag_service/.env
     volumes:
       - ./microservices/rag_service:/app
-      - ./microservices/db_service:/app/db_service
       - ./microservices/shared:/app/shared
       - ./docs:/app/docs
+    networks:
+      - xavigate
 
   vector_service:
     build:
@@ -31,8 +54,10 @@ services:
     volumes:
       - ./microservices/vector_service:/app
       - ./microservices/shared:/app/shared
-      # Mount existing Chroma DB files for vector search
       - ./microservices/rag_service/chroma_db:/app/chroma_db
+      - ./docs:/app/docs
+    networks:
+      - xavigate
 
   storage_service:
     build:
@@ -44,6 +69,7 @@ services:
     ports:
       - "8011:8011"
     env_file:
+      - ./.env
       - ./microservices/storage_service/.env
     environment:
       POSTGRES_DB: xavigate
@@ -54,8 +80,8 @@ services:
     volumes:
       - ./microservices/storage_service:/app
       - ./microservices/shared:/app/shared
-      # Mount db_service code so memory service can import get_connection
-      - ./microservices/db_service:/app/db_service
+    networks:
+      - xavigate
 
   stats_service:
     build:
@@ -69,18 +95,8 @@ services:
     volumes:
       - ./microservices/stats_service:/app
       - ./microservices/shared:/app/shared
-
-  db_service:
-    build:
-      context: ./microservices/db_service
-    container_name: xavigate_db_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8013"]
-    ports:
-      - "8013:8013"
-    env_file:
-      - ./microservices/db_service/.env
-    volumes:
-      - ./microservices/db_service:/app
+    networks:
+      - xavigate
 
   auth_service:
     build:
@@ -93,6 +109,8 @@ services:
       - ./microservices/auth_service/.env
     volumes:
       - ./microservices/auth_service:/app
+    networks:
+      - xavigate
   
   chat_service:
     build:
@@ -103,7 +121,6 @@ services:
       - rag_service
       - storage_service
       - stats_service
-      - db_service
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8015"]
     ports:
       - "8015:8015"
@@ -112,12 +129,15 @@ services:
     volumes:
       - ./microservices/chat_service:/app
       - ./microservices/shared:/app/shared
+    environment:
+      RAG_URL: http://vector_service:8017
+      STORAGE_URL: http://storage_service:8011
+    networks:
+      - xavigate
   mntest_service:
     build:
       context: ./microservices/mntest_service
     container_name: xavigate_mntest_service
-    depends_on:
-      - db_service
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8016"]
     ports:
       - "8016:8016"
@@ -125,9 +145,6 @@ services:
       - ./microservices/mntest_service/.env
     volumes:
       - ./microservices/mntest_service:/app
-      # Mount db_service code so MNTest service can import get_connection
-      - ./microservices/db_service:/app/db_service
-      # Mount shared code for consistency
       - ./microservices/shared:/app/shared
     environment:
       POSTGRES_DB: xavigate
@@ -135,6 +152,8 @@ services:
       POSTGRES_PASSWORD: changeme
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+    networks:
+      - xavigate
 
   nginx:
     image: nginx:stable
@@ -142,43 +161,20 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - rag_service
       - storage_service
       - stats_service
-      - db_service
       - auth_service
       - mntest_service
-
-  postgres:
-    image: ankane/pgvector
-    container_name: xavigate_postgres
-    restart: always
-    environment:
-      POSTGRES_DB: xavigate
-      POSTGRES_USER: xavigate_user
-      POSTGRES_PASSWORD: changeme
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  chroma:
-    image: chromadb/chroma
-    container_name: xavigate_chroma
-    volumes:
-      - chroma_data:/chroma/chroma
-
-  jupyter:
-    image: jupyter/base-notebook
-    container_name: xavigate_jupyter
-    ports:
-      - "8888:8888"
-    volumes:
-      - ./notebooks:/home/jovyan/work
-    command: start-notebook.sh --NotebookApp.token=''
+    networks:
+      - xavigate
 
 volumes:
   pgdata:
   chroma_data:
+
+networks:
+  xavigate:
+    driver: bridge
