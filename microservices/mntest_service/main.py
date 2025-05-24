@@ -73,8 +73,8 @@ try:
     )
     cur.close()
     conn.close()
-except Exception:
-    pass
+except Exception as e:
+    print(f"❌ Error during Postgres init: {e}", flush=True)
 
 class MNSubmitRequest(BaseModel):
     userId: str = Field(..., description="Cognito sub of the user")

@@ -162,6 +162,7 @@ services:
       - "8080:8080"
     volumes:
       - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - /var/www/xavigate-frontend:/var/www/xavigate-frontend
     depends_on:
       - rag_service
       - storage_service
