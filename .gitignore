@@ -5,6 +5,12 @@
 *.env.local
 *.env.docker
 *.jsonl
+*.docx
+*.md
+*.xlsx
+.DS_Store
+
+# Ignore all .env files except project root
 
 # Local Docker override files
 docker-compose.override.yml
