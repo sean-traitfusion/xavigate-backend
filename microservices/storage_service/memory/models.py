@@ -87,3 +87,8 @@ class UserMemory(BaseModel):
     avatar_profile: Optional[AvatarProfile] = None
     created_at: Optional[datetime] = None
     last_updated: Optional[datetime] = None
+
+class RuntimeConfig(BaseModel):
+    system_prompt: str
+    conversation_history_limit: int
+    top_k_rag_hits: int

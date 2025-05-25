@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from uuid import UUID
 import os
 import json
+from memory.models import RuntimeConfig
+
 
 from dotenv import load_dotenv
 # Load root and service .env for unified configuration
@@ -73,6 +75,28 @@ if ENV != "dev":
         last_updated TIMESTAMP DEFAULT NOW()
     );
     """)
+    # Runtime configuration table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS runtime_config (
+        id SERIAL PRIMARY KEY,
+        system_prompt TEXT NOT NULL,
+        conversation_history_limit INT DEFAULT 3,
+        top_k_rag_hits INT DEFAULT 4,
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+    """)
+    # Ensure a default row exists
+    cursor.execute("SELECT COUNT(*) FROM runtime_config")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("""
+            INSERT INTO runtime_config (system_prompt, conversation_history_limit, top_k_rag_hits)
+            VALUES (%s, %s, %s)
+        """, (
+            "Hi, I’m Xavigate. Let’s explore who you are and where your energy wants to go...",
+            3,
+            4
+        ))
+    
     # Session summary table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS memory_summary (
@@ -112,23 +136,21 @@ def upsert_session(mem: SessionMemory):
     upsert_session_direct(mem)
     return {"status": "session memory updated"}
 
+MAX_SESSION_CHARACTERS = 15000  # Limit before triggering summarization and reset
+
 def upsert_session_direct(mem: SessionMemory):
     now = datetime.utcnow()
-    # Set session expiration based on timeout (minutes)
-    timeout_min = int(os.getenv("SESSION_TIMEOUT_MINUTES", "120"))
-    expires_at = now + timedelta(minutes=timeout_min)
 
     if not mem.conversation_log:
         print("⚠️ No conversation log to store — skipping upsert.")
         return
 
-    # Use JSONB merge to preserve existing summary fields when updating partial conversation logs
+    # Save or update the session memory
     cursor.execute("""
         INSERT INTO session_memory (uuid, session_start, last_active, conversation_log, interim_scores, expires_at)
         VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (uuid) DO UPDATE SET
             last_active = EXCLUDED.last_active,
-            -- Merge existing conversation_log with new data, so partial updates (e.g., messages only) don't overwrite summaries
             conversation_log = session_memory.conversation_log || EXCLUDED.conversation_log,
             interim_scores = EXCLUDED.interim_scores,
             expires_at = EXCLUDED.expires_at;
@@ -138,8 +160,14 @@ def upsert_session_direct(mem: SessionMemory):
         now,
         json.dumps(mem.conversation_log, default=str),
         json.dumps(mem.interim_scores or {}, default=str),
-        expires_at
+        now + timedelta(days=90)
     ))
+
+    # Check character count
+    exchanges_text = json.dumps(mem.conversation_log.get("exchanges", []), default=str)
+    if len(exchanges_text) > MAX_SESSION_CHARACTERS:
+        print(f"⚠️ Session memory for {mem.uuid} exceeded {MAX_SESSION_CHARACTERS} chars — summarizing and clearing.")
+        expire_session_logic(str(mem.uuid))
 
 
 @router.get("/session-memory/{uuid}")
@@ -228,20 +256,31 @@ def get_session_review(uuid: str):
 
 # Internal expiration logic: summarize, persist, then delete session
 def expire_session_logic(user_uuid: str):
-    # Fetch active session memory
     cursor.execute("SELECT conversation_log FROM session_memory WHERE uuid = %s", (user_uuid,))
     rec = cursor.fetchone()
     if not rec or not rec[0]:
         return
     conv_log = rec[0]
-    # Build transcript text
     exchanges = conv_log.get("exchanges", []) if isinstance(conv_log, dict) else []
+
     transcript = ""
     for ex in exchanges:
-        transcript += f"User: {ex.get('user_prompt','')}\nAssistant: {ex.get('assistant_response','')}\n"
-    # Generate summary via OpenAI
-    summary_prompt = f"Summarize the following conversation in 1-2 sentences:\n\n{transcript}"
+        if "user_prompt" in ex:
+            transcript += f"User: {ex.get('user_prompt', '')}\n"
+        if "assistant_response" in ex:
+            transcript += f"Assistant: {ex.get('assistant_response', '')}\n"
+
+    # Persist user memory update
     try:
+        from memory.consolidate_session import synthesize_persistent_update
+        persistent_update = synthesize_persistent_update(UUID(user_uuid), plan={}, critique="", transcript=transcript)
+        upsert_user(persistent_update)
+    except Exception as e:
+        print(f"❌ Persistence update failed: {e}")
+
+    # Save transcript + summary
+    try:
+        summary_prompt = f"Summarize the following conversation in 1-2 sentences:\n\n{transcript}"
         comp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "system", "content": summary_prompt}],
@@ -250,20 +289,13 @@ def expire_session_logic(user_uuid: str):
         summary = comp.choices[0].message.content.strip()
     except Exception:
         summary = "Summary unavailable."
-    # Persist user memory updates via consolidate_session
-    try:
-        from memory.consolidate_session import synthesize_persistent_update
-        persistent_update = synthesize_persistent_update(UUID(user_uuid), plan={}, critique="")
-        # Upsert into user_memory
-        upsert_user(persistent_update, authorization="")
-    except Exception as e:
-        print(f"❌ Persistence update failed: {e}")
-    # Store session summary and full transcript
+
     cursor.execute(
         "INSERT INTO memory_summary (uuid, summary_text, full_transcript) VALUES (%s, %s, %s)",
         (user_uuid, summary, json.dumps(conv_log, default=str))
     )
-    # Delete active session memory
+
+    # Clear session
     cursor.execute("DELETE FROM session_memory WHERE uuid = %s", (user_uuid,))
     print(f"✅ Expired session {user_uuid} and stored summary.")
     
@@ -354,3 +386,42 @@ def get_summary(uuid: str):
         "full_transcript": rec[1],
         "created_at": rec[2]
     }
+
+# Runtime configuration endpoints
+@router.get("/runtime-config", response_model=RuntimeConfig)
+def get_runtime_config():
+    cursor.execute("SELECT system_prompt, conversation_history_limit, top_k_rag_hits FROM runtime_config ORDER BY id LIMIT 1")
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Runtime config not found")
+    return {
+        "system_prompt": row[0],
+        "conversation_history_limit": row[1],
+        "top_k_rag_hits": row[2],
+    }
+
+@router.post("/runtime-config")
+def update_runtime_config(cfg: RuntimeConfig):
+    now = datetime.utcnow()
+    cursor.execute("""
+        UPDATE runtime_config
+        SET system_prompt = %s,
+            conversation_history_limit = %s,
+            top_k_rag_hits = %s,
+            updated_at = %s
+        WHERE id = 1;
+    """, (
+        cfg.system_prompt,
+        cfg.conversation_history_limit,
+        cfg.top_k_rag_hits,
+        now
+    ))
+    return {"status": "ok"}
+
+@router.get("/all-summaries/{uuid}")
+def get_all_summaries(uuid: str):
+    cursor.execute(
+        "SELECT summary_text FROM memory_summary WHERE uuid = %s ORDER BY summary_id ASC",
+        (uuid,)
+    )
+    return {"summaries": [row[0] for row in cursor.fetchall() if row[0]]}
