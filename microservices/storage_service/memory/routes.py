@@ -39,6 +39,7 @@ def require_jwt(authorization: str | None = Header(None, alias="Authorization"))
 
 
 router = APIRouter(dependencies=[Depends(require_jwt)])
+
 print("✅ memory_routes.py loaded")
 print("🌍 ENV =", ENV)
 

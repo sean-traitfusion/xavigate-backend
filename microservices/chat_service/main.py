@@ -301,7 +301,7 @@ async def config_ui():
     </head>
     <body>
         <h1>Xavigate Runtime Config</h1>
-        <form method="POST" action="/__admin/config-ui">
+        <form method="POST" action="/api/chat-ui">
             <label for="system_prompt">System Prompt:</label>
             <textarea name="system_prompt">{cfg.get("system_prompt", "")}</textarea>
 
@@ -309,7 +309,8 @@ async def config_ui():
             <input type="number" name="top_k" value="{cfg.get("top_k_rag_hits", 5)}" min="1" max="10"/>
 
             <br/>
-            <button type="submit">Save Config</button>
+            <button type="submit" name="action" value="save">💾 Save Config</button>
+            <button type="submit" name="action" value="test">▶️ Run Test Prompt</button>
             <br>/>
             <label for="auth_token">Auth Token:</label>
             <input type="text" name="auth_token" style="width:100%" />
@@ -317,7 +318,7 @@ async def config_ui():
             <label for="test_message">Test Prompt:</label>
             <input type="text" name="test_message" style="width:100%" placeholder="What would you like to explore today?" />
 
-            <button type="submit" name="action" value="test">Run Test Prompt</button>
+            
         </form>
     </body>
     </html>
@@ -327,26 +328,47 @@ from fastapi import Form
 
 @app.post("/__admin/config-ui", response_class=HTMLResponse)
 async def save_config_ui(
-    system_prompt: str = Form(...),
-    top_k: int = Form(...),
+    system_prompt: Optional[str] = Form(None),
+    top_k: Optional[int] = Form(None),
     auth_token: Optional[str] = Form(None),
     test_message: Optional[str] = Form(None),
     action: Optional[str] = Form(None),
 ):
-    # 1. Save updated config
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            f"{STORAGE_URL}/api/memory/runtime-config",
-            json={
-                "system_prompt": system_prompt,
-                "conversation_history_limit": 0,  # legacy
-                "top_k_rag_hits": top_k
-            }
-        )
-
+    payload = None
     test_output = None
+    status_message = None
+
+    if action != "test" and not system_prompt:
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(f"{STORAGE_URL}/api/memory/runtime-config")
+                cfg = resp.json()
+                system_prompt = cfg.get("system_prompt", "")
+                top_k = top_k or cfg.get("top_k_rag_hits", 5)
+            except Exception:
+                system_prompt = ""
+                top_k = 5
+
+    # 1. Save updated config
+    if action == "save":
+        headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{STORAGE_URL}/api/memory/runtime-config",
+                headers=headers,
+                json={
+                    "system_prompt": system_prompt,
+                    "conversation_history_limit": 0,
+                    "top_k_rag_hits": top_k
+                }
+            )
+            if resp.status_code == 200:
+                status_message = "✅ Configuration saved successfully."
+            else:
+                status_message = f"❌ Save failed: {resp.status_code} — {await resp.aread()}"
+
+    # 2. Run test
     if action == "test" and auth_token and test_message:
-        # 2. Run test against /query using current values
         try:
             payload = {
                 "userId": "debug-user",
@@ -380,16 +402,17 @@ async def save_config_ui(
         except Exception as e:
             test_output = f"Test failed: {e}"
 
-    # Re-render the page with the test output
+    # Render HTML output
     return f"""
     <html><body>
         <h1>Xavigate Runtime Config</h1>
-        <form method="POST" action="/admin/config-ui">
+        {f'<div style="margin: 1rem 0; padding: 1rem; background-color: #eef; border-left: 4px solid #88f;">{status_message}</div>' if status_message else ''}
+        <form method="POST" action="/api/chat-ui">
             <label>System Prompt:</label><br>
-            <textarea name="system_prompt" rows="10" cols="80">{system_prompt}</textarea><br><br>
+            <textarea name="system_prompt" rows="10" cols="80">{system_prompt or ""}</textarea><br><br>
 
             <label>Top K:</label><br>
-            <input type="number" name="top_k" value="{top_k}" min="1" max="10"><br><br>
+            <input type="number" name="top_k" value="{top_k or 5}" min="1" max="10"><br><br>
 
             <label>Auth Token:</label><br>
             <input type="text" name="auth_token" style="width:100%" value="{auth_token or ''}"><br><br>
@@ -397,7 +420,8 @@ async def save_config_ui(
             <label>Test Prompt:</label><br>
             <input type="text" name="test_message" style="width:100%" value="{test_message or ''}"><br><br>
 
-            <button type="submit" name="action" value="test">Run Test Prompt</button>
+            <button type="submit" name="action" value="save">💾 Save Config</button>
+            <button type="submit" name="action" value="test">▶️ Run Test Prompt</button>
         </form>
 
         <hr>
@@ -405,7 +429,7 @@ async def save_config_ui(
         <pre>{test_output or "—"}</pre>
         <hr>
         <h3>Final Prompt Sent:</h3>
-        <pre>{json.dumps(payload, indent=2)}</pre>
+        <pre>{json.dumps(payload, indent=2) if payload else "—"}</pre>
         <hr>
     </body></html>
     """

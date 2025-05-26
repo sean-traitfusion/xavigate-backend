@@ -52,3 +52,4 @@ restart.sh
 *.sqlitemicroservices/vector_service/maintenance/bulk_chunks_all_cleaned.jsonl
 microservices/vector_service/maintenance/bulk_chunks_all.jsonl
 *.env
+FRONTEND_API.md
