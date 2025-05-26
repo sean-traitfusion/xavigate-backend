@@ -338,7 +338,7 @@ async def save_config_ui(
     test_output = None
     status_message = None
 
-    if action != "test" and not system_prompt:
+    if not system_prompt and auth_token:
         async with httpx.AsyncClient() as client:
             try:
                 resp = await client.get(f"{STORAGE_URL}/api/memory/runtime-config")
@@ -401,6 +401,20 @@ async def save_config_ui(
                     test_output = f"[Error {query_resp.status_code}]: {query_resp.text}"
         except Exception as e:
             test_output = f"Test failed: {e}"
+    # Refresh config from storage after test or save to pre-populate form fields
+    if auth_token:
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(
+                    f"{STORAGE_URL}/api/memory/runtime-config",
+                    headers={"Authorization": f"Bearer {auth_token}"}
+                )
+                if resp.status_code == 200:
+                    cfg = resp.json()
+                    system_prompt = cfg.get("system_prompt", system_prompt)
+                    top_k = cfg.get("top_k_rag_hits", top_k)
+            except Exception:
+                pass  # Keep existing values if fetch fails
 
     # Render HTML output
     return f"""
@@ -423,13 +437,18 @@ async def save_config_ui(
             <button type="submit" name="action" value="save">💾 Save Config</button>
             <button type="submit" name="action" value="test">▶️ Run Test Prompt</button>
         </form>
+        {f'<div style="color: red; margin-top: 1rem;">⚠️ Auth token required to view current config.</div>' if not auth_token else ''}
 
         <hr>
         <h3>Test Output:</h3>
-        <pre>{test_output or "—"}</pre>
+        <div style="width: 100%; max-height: 300px; overflow: auto; border: 1px solid #ccc; padding: 1rem; font-family: monospace; background-color: #f9f9f9;">
+            {test_output or "—"}
+        </div>
         <hr>
         <h3>Final Prompt Sent:</h3>
-        <pre>{json.dumps(payload, indent=2) if payload else "—"}</pre>
+        <div style="width: 100%; max-height: 300px; overflow: auto; border: 1px solid #ccc; padding: 1rem; font-family: monospace; background-color: #f9f9f9;">
+            {json.dumps(payload, indent=2) if payload else "—"}
+        </div>
         <hr>
     </body></html>
     """
