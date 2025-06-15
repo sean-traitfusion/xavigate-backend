@@ -145,7 +145,10 @@ async def chat_endpoint(
 
     async with httpx.AsyncClient() as client:
         # 1. Retrieve session memory (conversation log)
-        mem_resp = await client.get(f"{STORAGE_URL}/memory/session-memory/{req.sessionId}", headers=internal_headers)
+        mem_resp = await client.get(
+            f"{STORAGE_URL}/api/memory/session-memory/{req.sessionId}",
+            headers=internal_headers
+        )
         conversation_log = mem_resp.json().get("exchanges", []) if mem_resp.status_code == 200 else []
 
         # Extract past exchanges (support both flat list or nested 'exchanges')
@@ -156,7 +159,10 @@ async def chat_endpoint(
             exchanges = conversation_log
 
         # 1b. Retrieve existing session summary (if any)
-        sum_resp = await client.get(f"{STORAGE_URL}/memory/all-summaries/{req.userId}", headers=internal_headers)
+        sum_resp = await client.get(
+            f"{STORAGE_URL}/api/memory/all-summaries/{req.userId}",
+            headers=internal_headers
+        )
 
         if sum_resp.status_code == 200:
             summaries = sum_resp.json().get("summaries", [])
@@ -173,7 +179,10 @@ async def chat_endpoint(
 
         # 1c. Get config defaults from storage service
         try:
-            config_resp = await client.get(f"{STORAGE_URL}/api/memory/runtime-config")
+            config_resp = await client.get(
+                f"{STORAGE_URL}/api/memory/runtime-config",
+                headers=internal_headers
+            )
             config_defaults = config_resp.json()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch runtime config: {e}")
@@ -250,8 +259,9 @@ async def chat_endpoint(
         new_exchanges = exchanges.copy()
         new_exchanges.append({"user_prompt": req.message, "assistant_response": answer})
         save_payload = {"uuid": req.userId, "conversation_log": {"exchanges": new_exchanges}}
+        # 5. Persist new exchange to memory service
         await client.post(
-            f"{STORAGE_URL}/memory/session-memory",
+            f"{STORAGE_URL}/api/memory/session-memory",
             json=save_payload,
             headers=internal_headers
         )
@@ -381,8 +391,9 @@ async def save_config_ui(
                 "topK_RAG_hits": top_k,
             }
             async with httpx.AsyncClient() as client:
+                # Seed an empty session for test
                 await client.post(
-                    f"{STORAGE_URL}/memory/session-memory",
+                    f"{STORAGE_URL}/api/memory/session-memory",
                     json={
                         "uuid": "debug-session",
                         "conversation_log": {"exchanges": []}
