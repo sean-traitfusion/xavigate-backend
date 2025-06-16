@@ -134,6 +134,10 @@ class UserMemory(BaseModel):
 # Route to support frontend (adds compatibility)
 @router.post("/session-memory")
 def upsert_session(mem: SessionMemory):
+    # Dev mode: use in-memory store for session memory
+    if ENV == "dev":
+        DEV_SESSION_STORE[mem.uuid] = mem.conversation_log.get("exchanges", [])
+        return {"status": "session memory updated"}
     upsert_session_direct(mem)
     return {"status": "session memory updated"}
 

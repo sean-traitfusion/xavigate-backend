@@ -12,7 +12,11 @@ import json
 
 openai_client = OpenAI()
 
-AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://nginx:8080/api/auth")
+# Use localhost when running outside Docker, auth_service when inside
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth_service:8014")
+# Override for local testing
+if os.getenv("AUTH_SERVICE_OVERRIDE"):
+    AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_OVERRIDE")
 
 async def verify_key(token: str) -> bool:
     try:
@@ -158,24 +162,15 @@ async def chat_endpoint(
         elif isinstance(conversation_log, list):
             exchanges = conversation_log
 
-        # 1b. Retrieve existing session summary (if any)
-        sum_resp = await client.get(
-            f"{STORAGE_URL}/api/memory/all-summaries/{req.userId}",
+        # 1b. Get persistent memory (user summary) instead of session summaries
+        persistent_resp = await client.get(
+            f"{STORAGE_URL}/api/memory/persistent-memory/{req.userId}",
             headers=internal_headers
         )
-
-        if sum_resp.status_code == 200:
-            summaries = sum_resp.json().get("summaries", [])
-            # Join oldest → newest summaries, capped to ~3000 chars
-            session_summary = ""
-            summary_chars = 0
-            for s in summaries:
-                if summary_chars + len(s) > 3000:
-                    break
-                session_summary += s + "\n"
-                summary_chars += len(s)
-        else:
-            session_summary = ""
+        persistent_memory = ""
+        if persistent_resp.status_code == 200:
+            data = persistent_resp.json()
+            persistent_memory = data.get("summary", "")
 
         # 1c. Get config defaults from storage service
         try:
@@ -190,24 +185,14 @@ async def chat_endpoint(
         top_k = req.topK_RAG_hits or config_defaults.get("top_k_rag_hits", 5)
         SYSTEM_PROMPT = req.systemPrompt or config_defaults.get("system_prompt", DEFAULT_PROMPT)
 
-        # Build recent history (# of exchanges depends on config)
-        MAX_HISTORY_CHARS = 10000
-        history = ""
-        char_count = 0
-
-        # Reverse loop to prioritize most recent turns
-        for ex in reversed(exchanges):
-            turn = ""
+        # Convert exchanges to session lines for prompt optimization
+        session_lines = []
+        for ex in reversed(exchanges):  # Most recent first
             if "user_prompt" in ex and "assistant_response" in ex:
-                turn = f"User: {ex['user_prompt']}\nAssistant: {ex['assistant_response']}\n"
+                session_lines.append(f"User: {ex['user_prompt']}")
+                session_lines.append(f"Assistant: {ex['assistant_response']}")
             elif ex.get("role") and ex.get("content"):
-                turn = f"{ex['role'].capitalize()}: {ex['content']}\n"
-
-            if char_count + len(turn) > MAX_HISTORY_CHARS:
-                break
-
-            history = turn + history  # prepend so history flows oldest → newest
-            char_count += len(turn)
+                session_lines.append(f"{ex['role'].capitalize()}: {ex['content']}")
 
         # 2. Retrieve relevant glossary/context via Vector Search service
         vs_resp = await client.post(f"{RAG_URL}/search", json={"query": req.message, "top_k": top_k})
@@ -218,27 +203,45 @@ async def chat_endpoint(
         # Build context string from chunks
         context = "\n\n".join([c.get("chunk", "") for c in chunks])
 
-        # 3. Assemble GPT prompt
-        # Use systemPrompt from request if provided, else use a default
-        profile_section = f"USER PROFILE:\nName: {req.fullName or ''}\nUsername: {req.username}\nTrait Scores:\n"
-        for trait, score in req.traitScores.items():
-            profile_section += f"- {trait.title()}: {score}\n"
-
-        # Build full prompt with optional session summary
-        prompt_parts = [
-            SYSTEM_PROMPT,
-            "",
-            profile_section,
-            "SESSION SUMMARY:",
-            session_summary,
-            "RECENT EXCHANGES:",
-            history,
-            "GLOSSARY EXCERPTS:",
-            context,
-            "\nCURRENT QUESTION:",
-            req.message
+        # 3. Build base prompt with user profile
+        profile_parts = [
+            f"Name: {req.fullName or 'Unknown'}",
+            f"Username: {req.username}",
+            "Trait Scores:"
         ]
-        final_prompt = "\n".join(prompt_parts)
+        for trait, score in req.traitScores.items():
+            profile_parts.append(f"- {trait.title()}: {score}")
+        
+        # Create base prompt with system prompt and profile
+        base_prompt_parts = [SYSTEM_PROMPT]
+        if req.fullName or req.username:
+            base_prompt_parts.append(f"\nUser Profile:\n" + "\n".join(profile_parts))
+        
+        base_prompt = "\n".join(base_prompt_parts)
+        
+        # 3b. Optimize prompt using the prompt manager
+        optimize_resp = await client.post(
+            f"{STORAGE_URL}/api/memory/optimize-prompt",
+            json={
+                "base_prompt": base_prompt,
+                "uuid": req.userId,
+                "rag_context": context
+            },
+            headers=internal_headers
+        )
+        
+        if optimize_resp.status_code == 200:
+            optimize_data = optimize_resp.json()
+            final_prompt = optimize_data["final_prompt"]
+            metrics = optimize_data["metrics"]
+            
+            # Log metrics for monitoring
+            print(f"📊 Prompt metrics for {req.userId}:")
+            print(f"   Total: {metrics['total_chars']} chars")
+            print(f"   Utilization: {metrics['utilization_percent']:.1f}%")
+        else:
+            # Fallback to simple prompt if optimization fails
+            final_prompt = f"{base_prompt}\n\nCurrent Question: {req.message}\n\nContext:\n{context}"
 
         # 4. Call OpenAI
     
@@ -255,13 +258,18 @@ async def chat_endpoint(
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"OpenAI error: {e}")
 
-        # 5. Persist new exchange to memory service
-        new_exchanges = exchanges.copy()
-        new_exchanges.append({"user_prompt": req.message, "assistant_response": answer})
-        save_payload = {"uuid": req.userId, "conversation_log": {"exchanges": new_exchanges}}
-        # 5. Persist new exchange to memory service
+        # 5. Save the interaction using new memory endpoint
+        save_payload = {
+            "userId": req.userId,
+            "sessionId": req.sessionId,
+            "messages": [
+                {"role": "user", "content": req.message},
+                {"role": "assistant", "content": answer}
+            ]
+        }
+        
         await client.post(
-            f"{STORAGE_URL}/api/memory/session-memory",
+            f"{STORAGE_URL}/api/memory/save",
             json=save_payload,
             headers=internal_headers
         )

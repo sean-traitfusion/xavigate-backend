@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from memory.routes import router as memory_router
+from memory.routes_enhanced import router as memory_router
 from session.aq_routes import router as aq_router
 from session.session_routes import router as session_router
 from session.user_profile_routes import router as profile_router
