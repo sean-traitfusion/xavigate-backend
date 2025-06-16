@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Header, Depends, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -9,6 +9,7 @@ from openai import OpenAI
 import httpx
 from client import verify_key
 import json
+from prompt_builder import build_styled_prompt, format_user_context, DEFAULT_MN_PROMPT
 
 openai_client = OpenAI()
 
@@ -49,8 +50,8 @@ RAG_URL = os.getenv("RAG_URL", "http://localhost:8017")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Default system prompt for chat if not provided in config
-DEFAULT_PROMPT = "You are Xavigate, a life guide — an experienced Multiple Natures (MN) practitioner..."
+# Import default prompt from prompt_builder
+from prompt_builder import DEFAULT_MN_PROMPT as DEFAULT_PROMPT
 
 app = FastAPI(
     title="Chat Service",
@@ -188,7 +189,12 @@ async def chat_endpoint(
             raise HTTPException(status_code=500, detail=f"Failed to fetch runtime config: {e}")
 
         top_k = req.topK_RAG_hits or config_defaults.get("top_k_rag_hits", 5)
-        SYSTEM_PROMPT = req.systemPrompt or config_defaults.get("system_prompt", DEFAULT_PROMPT)
+        base_prompt = req.systemPrompt or config_defaults.get("system_prompt", DEFAULT_PROMPT)
+        prompt_style = config_defaults.get("prompt_style", "default")
+        custom_style_modifier = config_defaults.get("custom_style_modifier", None)
+        
+        # Build styled system prompt
+        SYSTEM_PROMPT = build_styled_prompt(base_prompt, prompt_style, custom_style_modifier)
 
         # Build recent history (# of exchanges depends on config)
         MAX_HISTORY_CHARS = 10000
@@ -219,37 +225,63 @@ async def chat_endpoint(
         context = "\n\n".join([c.get("chunk", "") for c in chunks])
 
         # 3. Assemble GPT prompt
-        # Use systemPrompt from request if provided, else use a default
-        profile_section = f"USER PROFILE:\nName: {req.fullName or ''}\nUsername: {req.username}\nTrait Scores:\n"
+        # Build user profile section with trait scores
+        profile_lines = [f"Name: {req.fullName or 'User'}", f"Username: {req.username}"]
+        profile_lines.append("\nTrait Scores:")
+        
+        # Group traits by score range for better interpretation
+        dominant_traits = []
+        balanced_traits = []
+        suppressed_traits = []
+        
         for trait, score in req.traitScores.items():
-            profile_section += f"- {trait.title()}: {score}\n"
+            trait_entry = f"- {trait.replace('_', ' ').title()}: {score}/10"
+            if score >= 7:
+                dominant_traits.append((trait, score))
+            elif score <= 3:
+                suppressed_traits.append((trait, score))
+            else:
+                balanced_traits.append((trait, score))
+            profile_lines.append(trait_entry)
+        
+        # Add trait analysis summary
+        if dominant_traits:
+            profile_lines.append(f"\nDominant Traits (strengths): {', '.join([t[0].replace('_', ' ').title() for t in dominant_traits])}")
+        if suppressed_traits:
+            profile_lines.append(f"Suppressed Traits (growth areas): {', '.join([t[0].replace('_', ' ').title() for t in suppressed_traits])}")
+        
+        profile_section = "\n".join(profile_lines)
+        
+        # Format user context using the utility function
+        user_context = format_user_context(
+            user_profile=profile_section,
+            session_summary=session_summary,
+            recent_history=history,
+            rag_context=context
+        )
+        
+        # Build the final user message
+        final_prompt = f"{user_context}\n\nCURRENT QUESTION:\n{req.message}"
 
-        # Build full prompt with session summary
-        prompt_parts = [
-            SYSTEM_PROMPT,
-            "",
-            profile_section,
-            "SESSION SUMMARY:",
-            session_summary,
-            "RECENT EXCHANGES:",
-            history,
-            "GLOSSARY EXCERPTS:",
-            context,
-            "\nCURRENT QUESTION:",
-            req.message
-        ]
-        final_prompt = "\n".join(prompt_parts)
-
-        # 4. Call OpenAI
-    
+        # 4. Call OpenAI with improved prompting
         try:
+            # Use config values for OpenAI parameters
+            model = config_defaults.get("model", "gpt-3.5-turbo")
+            temperature = config_defaults.get("temperature", 0.7)
+            max_tokens = config_defaults.get("max_tokens", 1000)
+            presence_penalty = config_defaults.get("presence_penalty", 0.1)
+            frequency_penalty = config_defaults.get("frequency_penalty", 0.1)
+            
             completion = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": final_prompt}
                 ],
-                temperature=0.3,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                presence_penalty=presence_penalty,
+                frequency_penalty=frequency_penalty
             )
             answer = completion.choices[0].message.content
         except Exception as e:
@@ -285,61 +317,265 @@ async def chat_endpoint(
             followup="",
         )
     
-@app.get("/__admin/config-ui", response_class=HTMLResponse)
+@app.get("/admin", response_class=HTMLResponse)
 async def config_ui():
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.get(f"{STORAGE_URL}/api/memory/runtime-config")
-            cfg = resp.json()
-        except Exception:
-            cfg = {
-                "system_prompt": "Failed to load config.",
-                "top_k_rag_hits": 5
-            }
+    # In production, config will be loaded via client-side fetch with auth token
+    # For initial render, provide defaults
+    cfg = {
+        "system_prompt": "",
+        "top_k_rag_hits": 5,
+        "prompt_style": "default",
+        "custom_style_modifier": "",
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "presence_penalty": 0.1,
+        "frequency_penalty": 0.1,
+        "model": "gpt-3.5-turbo"
+    }
 
     return f"""
     <html>
     <head>
-        <title>Xavigate Config Panel</title>
+        <title>Xavigate Admin Panel</title>
         <style>
-            body {{ font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }}
-            textarea {{ width: 100%; height: 300px; font-family: monospace; padding: 1rem; }}
-            input {{ width: 100px; padding: 0.5rem; font-size: 1rem; }}
-            button {{ margin-top: 1rem; padding: 0.75rem 1.5rem; font-size: 1rem; }}
-            label {{ display: block; margin-top: 1rem; font-weight: bold; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1000px; margin: 0 auto; padding: 2rem; background: #f5f5f5; }}
+            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; }}
+            h1 {{ margin: 0; font-size: 2rem; }}
+            .subtitle {{ opacity: 0.9; margin-top: 0.5rem; }}
+            .card {{ background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 2rem; }}
+            .card h2 {{ margin-top: 0; color: #333; border-bottom: 2px solid #eee; padding-bottom: 1rem; }}
+            textarea {{ width: 100%; min-height: 200px; font-family: monospace; padding: 1rem; border: 1px solid #ddd; border-radius: 5px; resize: vertical; }}
+            input, select {{ padding: 0.75rem; font-size: 1rem; border: 1px solid #ddd; border-radius: 5px; }}
+            input[type="number"] {{ width: 120px; }}
+            input[type="range"] {{ width: 300px; }}
+            .range-container {{ display: flex; align-items: center; gap: 1rem; }}
+            .range-value {{ font-weight: bold; min-width: 50px; }}
+            select {{ width: 250px; }}
+            button {{ padding: 0.75rem 2rem; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer; margin-right: 1rem; }}
+            button[value="save"] {{ background: #667eea; color: white; }}
+            button[value="test"] {{ background: #48bb78; color: white; }}
+            button:hover {{ opacity: 0.9; }}
+            label {{ display: block; margin-top: 1.5rem; margin-bottom: 0.5rem; font-weight: 600; color: #444; }}
+            .help-text {{ font-size: 0.875rem; color: #666; margin-top: 0.25rem; }}
+            .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }}
+            @media (max-width: 768px) {{ .grid {{ grid-template-columns: 1fr; }} }}
         </style>
     </head>
     <body>
-        <h1>Xavigate Runtime Config</h1>
-        <form method="POST" action="/api/chat-ui">
-            <label for="system_prompt">System Prompt:</label>
-            <textarea name="system_prompt">{cfg.get("system_prompt", "")}</textarea>
+        <div class="header">
+            <h1>🧭 Xavigate Admin Panel</h1>
+            <p class="subtitle">Configure AI behavior, prompting, and system parameters</p>
+        </div>
+        <form method="POST" action="/admin">
+            <div class="card">
+                <h2>Prompt Configuration</h2>
+                <label for="system_prompt">System Prompt:</label>
+                <p class="help-text">Define how Xavigate should behave and respond to users</p>
+                <textarea name="system_prompt">{cfg.get("system_prompt", "")}</textarea>
 
-            <label for="top_k">Top K RAG Hits:</label>
-            <input type="number" name="top_k" value="{cfg.get("top_k_rag_hits", 5)}" min="1" max="10"/>
+                <label for="prompt_style">Conversation Style:</label>
+                <p class="help-text">Choose how Xavigate should interact with users</p>
+                <select name="prompt_style">
+                    <option value="default" {"selected" if cfg.get("prompt_style", "default") == "default" else ""}>Default - Warm & Insightful</option>
+                    <option value="empathetic" {"selected" if cfg.get("prompt_style") == "empathetic" else ""}>Empathetic - Emotional Support</option>
+                    <option value="analytical" {"selected" if cfg.get("prompt_style") == "analytical" else ""}>Analytical - Data-Driven</option>
+                    <option value="motivational" {"selected" if cfg.get("prompt_style") == "motivational" else ""}>Motivational - Action-Oriented</option>
+                    <option value="socratic" {"selected" if cfg.get("prompt_style") == "socratic" else ""}>Socratic - Question-Based</option>
+                    <option value="custom" {"selected" if cfg.get("prompt_style") == "custom" else ""}>Custom Style</option>
+                </select>
 
-            <br/>
-            <button type="submit" name="action" value="save">💾 Save Config</button>
-            <button type="submit" name="action" value="test">▶️ Run Test Prompt</button>
-            <br>/>
-            <label for="auth_token">Auth Token:</label>
-            <input type="text" name="auth_token" style="width:100%" />
+                <label for="custom_style_modifier">Custom Style Instructions:</label>
+                <p class="help-text">Define your own conversation style (only used when Custom is selected)</p>
+                <textarea name="custom_style_modifier" rows="3">{cfg.get("custom_style_modifier", "")}</textarea>
+            </div>
 
-            <label for="test_message">Test Prompt:</label>
-            <input type="text" name="test_message" style="width:100%" placeholder="What would you like to explore today?" />
+            <div class="card">
+                <h2>AI Model Parameters</h2>
+                <div class="grid">
+                    <div>
+                        <label for="model">Model:</label>
+                        <p class="help-text">OpenAI model to use</p>
+                        <select name="model">
+                            <option value="gpt-3.5-turbo" {"selected" if cfg.get("model", "gpt-3.5-turbo") == "gpt-3.5-turbo" else ""}>GPT-3.5 Turbo (Fast)</option>
+                            <option value="gpt-4" {"selected" if cfg.get("model") == "gpt-4" else ""}>GPT-4 (Advanced)</option>
+                            <option value="gpt-4-turbo-preview" {"selected" if cfg.get("model") == "gpt-4-turbo-preview" else ""}>GPT-4 Turbo (Latest)</option>
+                        </select>
 
-            
+                        <label for="temperature">Temperature: <span class="range-value" id="temp-value">{cfg.get("temperature", 0.7)}</span></label>
+                        <p class="help-text">Controls randomness (0=focused, 1=creative)</p>
+                        <div class="range-container">
+                            <input type="range" name="temperature" value="{cfg.get("temperature", 0.7)}" min="0" max="1" step="0.1" 
+                                   oninput="document.getElementById('temp-value').textContent = this.value">
+                        </div>
+
+                        <label for="max_tokens">Max Tokens:</label>
+                        <p class="help-text">Maximum response length</p>
+                        <input type="number" name="max_tokens" value="{cfg.get("max_tokens", 1000)}" min="100" max="4000" step="100"/>
+                    </div>
+                    <div>
+                        <label for="presence_penalty">Presence Penalty: <span class="range-value" id="presence-value">{cfg.get("presence_penalty", 0.1)}</span></label>
+                        <p class="help-text">Encourages new topics (-2 to 2)</p>
+                        <div class="range-container">
+                            <input type="range" name="presence_penalty" value="{cfg.get("presence_penalty", 0.1)}" min="-2" max="2" step="0.1"
+                                   oninput="document.getElementById('presence-value').textContent = this.value">
+                        </div>
+
+                        <label for="frequency_penalty">Frequency Penalty: <span class="range-value" id="freq-value">{cfg.get("frequency_penalty", 0.1)}</span></label>
+                        <p class="help-text">Reduces repetition (-2 to 2)</p>
+                        <div class="range-container">
+                            <input type="range" name="frequency_penalty" value="{cfg.get("frequency_penalty", 0.1)}" min="-2" max="2" step="0.1"
+                                   oninput="document.getElementById('freq-value').textContent = this.value">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Memory & Context Settings</h2>
+                <div class="grid">
+                    <div>
+                        <label for="top_k">RAG Results (Top K):</label>
+                        <p class="help-text">Number of knowledge base results to include</p>
+                        <input type="number" name="top_k" value="{cfg.get("top_k_rag_hits", 5)}" min="1" max="20"/>
+                    </div>
+                    <div>
+                        <label for="conversation_history_limit">Conversation History:</label>
+                        <p class="help-text">Number of previous exchanges to include</p>
+                        <input type="number" name="conversation_history_limit" value="{cfg.get("conversation_history_limit", 5)}" min="0" max="20"/>
+                    </div>
+                </div>
+            </div>
+
+            </div>
+
+            <div class="card">
+                <h2>Test Configuration</h2>
+                <label for="auth_token">Auth Token:</label>
+                <p class="help-text">Your Cognito access token for authentication</p>
+                <input type="text" name="auth_token" style="width:100%" placeholder="Bearer token..." />
+
+                <label for="test_message">Test Message:</label>
+                <p class="help-text">Test your configuration with a sample query</p>
+                <input type="text" name="test_message" style="width:100%" placeholder="What would you like to explore today?" />
+                
+                <div style="margin-top: 2rem;">
+                    <button type="submit" name="action" value="save">💾 Save Configuration</button>
+                    <button type="submit" name="action" value="test">🧪 Test Configuration</button>
+                </div>
+            </div>
         </form>
+        
+        <script>
+        // Auto-load config when auth token is provided
+        document.querySelector('input[name="auth_token"]').addEventListener('blur', async function() {{
+            const token = this.value.trim();
+            if (!token) return;
+            
+            try {{
+                const response = await fetch('/api/storage/api/memory/runtime-config', {{
+                    headers: {{
+                        'Authorization': token.startsWith('Bearer ') ? token : 'Bearer ' + token
+                    }}
+                }});
+                
+                if (response.ok) {{
+                    const config = await response.json();
+                    
+                    // Update form fields with loaded config
+                    document.querySelector('textarea[name="system_prompt"]').value = config.system_prompt || '';
+                    document.querySelector('input[name="top_k"]').value = config.top_k_rag_hits || 5;
+                    
+                    // Update style selection
+                    const styleSelect = document.querySelector('select[name="prompt_style"]');
+                    styleSelect.value = config.prompt_style || 'default';
+                    
+                    // Update custom style modifier
+                    document.querySelector('textarea[name="custom_style_modifier"]').value = config.custom_style_modifier || '';
+                    
+                    // Update model settings
+                    const modelSelect = document.querySelector('select[name="model"]');
+                    if (modelSelect) modelSelect.value = config.model || 'gpt-3.5-turbo';
+                    
+                    // Update temperature
+                    const tempInput = document.querySelector('input[name="temperature"]');
+                    if (tempInput) {{
+                        tempInput.value = config.temperature || 0.7;
+                        document.getElementById('temp-value').textContent = config.temperature || 0.7;
+                    }}
+                    
+                    // Update other fields
+                    const maxTokensInput = document.querySelector('input[name="max_tokens"]');
+                    if (maxTokensInput) maxTokensInput.value = config.max_tokens || 1000;
+                    
+                    const presencePenaltyInput = document.querySelector('input[name="presence_penalty"]');
+                    if (presencePenaltyInput) {{
+                        presencePenaltyInput.value = config.presence_penalty || 0.1;
+                        document.getElementById('presence-value').textContent = config.presence_penalty || 0.1;
+                    }}
+                    
+                    const freqPenaltyInput = document.querySelector('input[name="frequency_penalty"]');
+                    if (freqPenaltyInput) {{
+                        freqPenaltyInput.value = config.frequency_penalty || 0.1;
+                        document.getElementById('freq-value').textContent = config.frequency_penalty || 0.1;
+                    }}
+                    
+                    // Update conversation history limit
+                    const historyLimitInput = document.querySelector('input[name="conversation_history_limit"]');
+                    if (historyLimitInput) historyLimitInput.value = config.conversation_history_limit || 5;
+                    
+                    toggleCustomStyle();
+                    
+                    // Show success message
+                    alert('Configuration loaded successfully!');
+                }} else {{
+                    alert('Failed to load configuration. Check your token.');
+                }}
+            }} catch (error) {{
+                console.error('Error loading config:', error);
+                alert('Error loading configuration');
+            }}
+        }});
+        
+        // For production, adjust API URL
+        if (window.location.hostname !== 'localhost') {{
+            // Update fetch URL for production
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options) {{
+                if (url.startsWith('/api/storage/')) {{
+                    // Already has correct prefix for production
+                    return originalFetch.call(this, url, options);
+                }}
+                return originalFetch.call(this, url, options);
+            }};
+        }} else {{
+            // For development, update URLs
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options) {{
+                if (url === '/api/storage/api/memory/runtime-config') {{
+                    url = 'http://localhost:8011/api/memory/runtime-config';
+                }}
+                return originalFetch.call(this, url, options);
+            }};
+        }}
+        </script>
     </body>
     </html>
     """
 
 from fastapi import Form
 
-@app.post("/__admin/config-ui", response_class=HTMLResponse)
+@app.post("/admin", response_class=HTMLResponse)
 async def save_config_ui(
     system_prompt: Optional[str] = Form(None),
     top_k: Optional[int] = Form(None),
+    prompt_style: Optional[str] = Form(None),
+    custom_style_modifier: Optional[str] = Form(None),
+    model: Optional[str] = Form(None),
+    temperature: Optional[float] = Form(None),
+    max_tokens: Optional[int] = Form(None),
+    presence_penalty: Optional[float] = Form(None),
+    frequency_penalty: Optional[float] = Form(None),
+    conversation_history_limit: Optional[int] = Form(None),
     auth_token: Optional[str] = Form(None),
     test_message: Optional[str] = Form(None),
     action: Optional[str] = Form(None),
@@ -347,6 +583,10 @@ async def save_config_ui(
     payload = None
     test_output = None
     status_message = None
+    
+    # Initialize style variables with defaults
+    prompt_style = prompt_style or "default"
+    custom_style_modifier = custom_style_modifier or ""
 
     if not system_prompt and auth_token:
         async with httpx.AsyncClient() as client:
@@ -355,9 +595,25 @@ async def save_config_ui(
                 cfg = resp.json()
                 system_prompt = cfg.get("system_prompt", "")
                 top_k = top_k or cfg.get("top_k_rag_hits", 5)
+                prompt_style = prompt_style or cfg.get("prompt_style", "default")
+                custom_style_modifier = custom_style_modifier or cfg.get("custom_style_modifier", "")
+                model = model or cfg.get("model", "gpt-3.5-turbo")
+                temperature = temperature or cfg.get("temperature", 0.7)
+                max_tokens = max_tokens or cfg.get("max_tokens", 1000)
+                presence_penalty = presence_penalty or cfg.get("presence_penalty", 0.1)
+                frequency_penalty = frequency_penalty or cfg.get("frequency_penalty", 0.1)
+                conversation_history_limit = conversation_history_limit or cfg.get("conversation_history_limit", 5)
             except Exception:
                 system_prompt = ""
                 top_k = 5
+                prompt_style = "default"
+                custom_style_modifier = ""
+                model = "gpt-3.5-turbo"
+                temperature = 0.7
+                max_tokens = 1000
+                presence_penalty = 0.1
+                frequency_penalty = 0.1
+                conversation_history_limit = 5
 
     # 1. Save updated config
     if action == "save":
@@ -368,8 +624,15 @@ async def save_config_ui(
                 headers=headers,
                 json={
                     "system_prompt": system_prompt,
-                    "conversation_history_limit": 0,
-                    "top_k_rag_hits": top_k
+                    "conversation_history_limit": conversation_history_limit,
+                    "top_k_rag_hits": top_k,
+                    "prompt_style": prompt_style,
+                    "custom_style_modifier": custom_style_modifier,
+                    "model": model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "presence_penalty": presence_penalty,
+                    "frequency_penalty": frequency_penalty
                 }
             )
             if resp.status_code == 200:
@@ -424,20 +687,70 @@ async def save_config_ui(
                     cfg = resp.json()
                     system_prompt = cfg.get("system_prompt", system_prompt)
                     top_k = cfg.get("top_k_rag_hits", top_k)
+                    prompt_style = cfg.get("prompt_style", prompt_style)
+                    custom_style_modifier = cfg.get("custom_style_modifier", custom_style_modifier)
             except Exception:
                 pass  # Keep existing values if fetch fails
 
-    # Render HTML output
+    # Render HTML output with same styling as GET
     return f"""
-    <html><body>
-        <h1>Xavigate Runtime Config</h1>
-        {f'<div style="margin: 1rem 0; padding: 1rem; background-color: #eef; border-left: 4px solid #88f;">{status_message}</div>' if status_message else ''}
-        <form method="POST" action="/api/chat-ui">
+    <html>
+    <head>
+        <title>Xavigate Admin Panel</title>
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1000px; margin: 0 auto; padding: 2rem; background: #f5f5f5; }}
+            .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; }}
+            h1 {{ margin: 0; font-size: 2rem; }}
+            .subtitle {{ opacity: 0.9; margin-top: 0.5rem; }}
+            .card {{ background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 2rem; }}
+            .card h2 {{ margin-top: 0; color: #333; border-bottom: 2px solid #eee; padding-bottom: 1rem; }}
+            .status {{ margin: 1rem 0; padding: 1rem; border-radius: 5px; }}
+            .status.success {{ background-color: #c6f6d5; border-left: 4px solid #48bb78; color: #22543d; }}
+            .status.error {{ background-color: #fed7d7; border-left: 4px solid #f56565; color: #742a2a; }}
+            textarea {{ width: 100%; min-height: 200px; font-family: monospace; padding: 1rem; border: 1px solid #ddd; border-radius: 5px; resize: vertical; }}
+            input, select {{ padding: 0.75rem; font-size: 1rem; border: 1px solid #ddd; border-radius: 5px; }}
+            input[type="number"] {{ width: 120px; }}
+            input[type="range"] {{ width: 300px; }}
+            .range-container {{ display: flex; align-items: center; gap: 1rem; }}
+            .range-value {{ font-weight: bold; min-width: 50px; }}
+            select {{ width: 250px; }}
+            button {{ padding: 0.75rem 2rem; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer; margin-right: 1rem; }}
+            button[value="save"] {{ background: #667eea; color: white; }}
+            button[value="test"] {{ background: #48bb78; color: white; }}
+            button:hover {{ opacity: 0.9; }}
+            label {{ display: block; margin-top: 1.5rem; margin-bottom: 0.5rem; font-weight: 600; color: #444; }}
+            .help-text {{ font-size: 0.875rem; color: #666; margin-top: 0.25rem; }}
+            .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }}
+            .output {{ background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 1rem; margin-top: 1rem; }}
+            pre {{ white-space: pre-wrap; word-wrap: break-word; }}
+            @media (max-width: 768px) {{ .grid {{ grid-template-columns: 1fr; }} }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🧭 Xavigate Admin Panel</h1>
+            <p class="subtitle">Configure AI behavior, prompting, and system parameters</p>
+        </div>
+        {f'<div class="status {"success" if status_message and "✅" in status_message else "error"}">{status_message}</div>' if status_message else ''}
+        <form method="POST" action="/admin">
             <label>System Prompt:</label><br>
             <textarea name="system_prompt" rows="10" cols="80">{system_prompt or ""}</textarea><br><br>
 
             <label>Top K:</label><br>
             <input type="number" name="top_k" value="{top_k or 5}" min="1" max="10"><br><br>
+
+            <label>Prompt Style:</label><br>
+            <select name="prompt_style" style="width: 200px; padding: 0.5rem;">
+                <option value="default" {"selected" if prompt_style == "default" else ""}>Default</option>
+                <option value="empathetic" {"selected" if prompt_style == "empathetic" else ""}>Empathetic</option>
+                <option value="analytical" {"selected" if prompt_style == "analytical" else ""}>Analytical</option>
+                <option value="motivational" {"selected" if prompt_style == "motivational" else ""}>Motivational</option>
+                <option value="socratic" {"selected" if prompt_style == "socratic" else ""}>Socratic</option>
+                <option value="custom" {"selected" if prompt_style == "custom" else ""}>Custom</option>
+            </select><br><br>
+
+            <label>Custom Style Instructions (if custom selected):</label><br>
+            <textarea name="custom_style_modifier" rows="3" cols="80">{custom_style_modifier or ""}</textarea><br><br>
 
             <label>Auth Token:</label><br>
             <input type="text" name="auth_token" style="width:100%" value="{auth_token or ''}"><br><br>

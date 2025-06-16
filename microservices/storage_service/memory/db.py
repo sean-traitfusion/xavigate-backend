@@ -107,9 +107,14 @@ def initialize_memory_tables():
                     uuid VARCHAR(255) NOT NULL,
                     role VARCHAR(50) NOT NULL,
                     message TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_uuid_created (uuid, created_at) IF NOT EXISTS
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
+            """)
+            
+            # Create index separately
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_memory_uuid_created 
+                ON session_memory (uuid, created_at);
             """)
             
             # Persistent memory table
@@ -135,9 +140,13 @@ def initialize_memory_tables():
                     chars_before INTEGER,
                     chars_after INTEGER,
                     details JSONB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_uuid_created (uuid, created_at) IF NOT EXISTS
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
+            """)
+            
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_summarization_events_uuid_created 
+                ON summarization_events (uuid, created_at);
             """)
             
             # Session prompts table (for debugging)
@@ -153,9 +162,13 @@ def initialize_memory_tables():
                     estimated_tokens INTEGER,
                     strategy VARCHAR(50),
                     model VARCHAR(100),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_uuid (uuid) IF NOT EXISTS
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
+            """)
+            
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_prompts_uuid 
+                ON session_prompts (uuid);
             """)
             
             # Compression events table
@@ -168,9 +181,13 @@ def initialize_memory_tables():
                     compressed_size INTEGER,
                     compression_ratio FLOAT,
                     compression_count INTEGER,
-                    model_used VARCHAR(100),
-                    INDEX idx_uuid (uuid) IF NOT EXISTS
+                    model_used VARCHAR(100)
                 );
+            """)
+            
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_compression_events_uuid 
+                ON compression_events (uuid);
             """)
             
             # Interaction logs table (for historical data)
@@ -185,9 +202,13 @@ def initialize_memory_tables():
                     rag_context TEXT,
                     strategy VARCHAR(100),
                     model VARCHAR(100),
-                    tools_called TEXT,
-                    INDEX idx_uuid_created (uuid, created_at) IF NOT EXISTS
+                    tools_called TEXT
                 );
+            """)
+            
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_interaction_logs_uuid_created 
+                ON interaction_logs (uuid, created_at);
             """)
             
             # User identity table

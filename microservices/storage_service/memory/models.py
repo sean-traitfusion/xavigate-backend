@@ -92,3 +92,11 @@ class RuntimeConfig(BaseModel):
     system_prompt: str
     conversation_history_limit: int
     top_k_rag_hits: int
+    prompt_style: Optional[str] = "default"  # default, empathetic, analytical, motivational, socratic, custom
+    custom_style_modifier: Optional[str] = None  # For custom style instructions
+    # OpenAI parameters
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 1000
+    presence_penalty: Optional[float] = 0.1
+    frequency_penalty: Optional[float] = 0.1
+    model: Optional[str] = "gpt-3.5-turbo"

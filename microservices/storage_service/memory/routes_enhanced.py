@@ -314,6 +314,13 @@ def get_runtime_config():
         "system_prompt": runtime_config.get("SYSTEM_PROMPT", "Hi, I'm Xavigate..."),
         "conversation_history_limit": runtime_config.get("CONVERSATION_HISTORY_LIMIT", 3),
         "top_k_rag_hits": runtime_config.get("TOP_K_RAG_HITS", 4),
+        "prompt_style": runtime_config.get("PROMPT_STYLE", "default"),
+        "custom_style_modifier": runtime_config.get("CUSTOM_STYLE_MODIFIER", None),
+        "temperature": runtime_config.get("TEMPERATURE", 0.7),
+        "max_tokens": runtime_config.get("MAX_TOKENS", 1000),
+        "presence_penalty": runtime_config.get("PRESENCE_PENALTY", 0.1),
+        "frequency_penalty": runtime_config.get("FREQUENCY_PENALTY", 0.1),
+        "model": runtime_config.get("MODEL", "gpt-3.5-turbo"),
     }
 
 @router.post("/runtime-config")
@@ -322,6 +329,13 @@ def update_runtime_config(cfg: RuntimeConfig):
     runtime_config.set_config("SYSTEM_PROMPT", cfg.system_prompt)
     runtime_config.set_config("CONVERSATION_HISTORY_LIMIT", cfg.conversation_history_limit)
     runtime_config.set_config("TOP_K_RAG_HITS", cfg.top_k_rag_hits)
+    runtime_config.set_config("PROMPT_STYLE", cfg.prompt_style)
+    runtime_config.set_config("CUSTOM_STYLE_MODIFIER", cfg.custom_style_modifier)
+    runtime_config.set_config("TEMPERATURE", cfg.temperature)
+    runtime_config.set_config("MAX_TOKENS", cfg.max_tokens)
+    runtime_config.set_config("PRESENCE_PENALTY", cfg.presence_penalty)
+    runtime_config.set_config("FREQUENCY_PENALTY", cfg.frequency_penalty)
+    runtime_config.set_config("MODEL", cfg.model)
     return {"status": "ok"}
 
 # Memory stats endpoint (new)
