@@ -247,7 +247,16 @@ def generate_conversation_summary(conversation_text: str) -> Optional[str]:
     Generate a summary of the conversation using OpenAI
     """
     try:
-        import openai
+        from openai import OpenAI
+        import os
+        
+        # Initialize OpenAI client
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print(f"❌ OPENAI_API_KEY not found in environment")
+            return None
+        
+        client = OpenAI(api_key=api_key)
         
         # Get model and temperature from config
         model = runtime_config.get("GPT_MODEL", "gpt-4")
@@ -256,7 +265,7 @@ def generate_conversation_summary(conversation_text: str) -> Optional[str]:
         # Format the prompt
         prompt = get_summary_prompt().format(conversation_text=conversation_text)
         
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that creates concise, comprehensive conversation summaries."},

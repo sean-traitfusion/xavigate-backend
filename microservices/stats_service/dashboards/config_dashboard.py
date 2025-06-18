@@ -64,7 +64,7 @@ CONVERSATION STYLE:
 
 Remember: You're not just answering questions - you're helping them understand how their unique trait constellation influences their experiences and guiding them toward greater alignment."""
 
-def get_config_dashboard_content(config: Dict[str, Any], status_message: str = None, test_output: str = None) -> str:
+def get_config_dashboard_content(config: Dict[str, Any], status_message: str = None) -> str:
     """Generate the configuration dashboard content with all settings."""
     
     # Get values with proper defaults
@@ -109,14 +109,6 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
         status_class = "success" if "✅" in status_message else "error"
         status_html = f'<div class="status-message {status_class}">{status_message}</div>'
     
-    test_output_html = ""
-    if test_output:
-        test_output_html = f"""
-        <div class="card">
-            <h3>Test Output</h3>
-            <pre style="background: #f5f5f5; padding: 1rem; border-radius: 8px; overflow-x: auto;">{test_output}</pre>
-        </div>
-        """
     
     return f"""
         <div class="content-header">
@@ -131,7 +123,6 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
             <button class="tab active" onclick="showTab('chat')">Chat Settings</button>
             <button class="tab" onclick="showTab('memory')">Memory Settings</button>
             <button class="tab" onclick="showTab('prompts')">Prompt Templates</button>
-            <button class="tab" onclick="showTab('test')">Test Configuration</button>
         </div>
         
         <form method="POST" action="/dashboard/" id="config-form">
@@ -350,30 +341,8 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
                 </div>
             </div>
 
-            <!-- Test Configuration Tab -->
-            <div id="test-tab" class="tab-content">
-                <div class="card">
-                    <h3>🧪 Test Configuration</h3>
-                    <div class="info-box" style="background: #fff3cd; border-color: #ffeaa7; color: #856404;">
-                        ⚠️ <strong>Important:</strong> Save your configuration changes first! Testing uses the last saved configuration, not unsaved form changes.
-                    </div>
-                    <label for="auth_token">Auth Token:</label>
-                    <p class="help-text">Your Cognito access token for authentication</p>
-                    <input type="text" name="auth_token" style="width:100%" placeholder="Bearer token..." />
-
-                    <label for="test_message">Test Message:</label>
-                    <p class="help-text">Test your configuration with a sample query</p>
-                    <input type="text" name="test_message" style="width:100%" placeholder="What would you like to explore today?" />
-                    
-                    <div style="margin-top: 2rem;">
-                        <button type="submit" name="action" value="save">💾 Save Configuration</button>
-                        <button type="submit" name="action" value="test">🧪 Test Configuration</button>
-                    </div>
-                </div>
-            </div>
         </form>
         
-        {test_output_html}
         
         <style>
             /* Tab styles */
@@ -547,93 +516,6 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
             }}
         }}
         
-        // Auto-load config when auth token is provided
-        document.querySelector('input[name="auth_token"]').addEventListener('blur', async function() {{
-            const token = this.value.trim();
-            if (!token) return;
-            
-            try {{
-                const response = await fetch('/api/storage/api/memory/runtime-config', {{
-                    headers: {{
-                        'Authorization': token.startsWith('Bearer ') ? token : 'Bearer ' + token
-                    }}
-                }});
-                
-                if (response.ok) {{
-                    const config = await response.json();
-                    
-                    // Map the runtime config keys to our form field names
-                    const fieldMapping = {{
-                        // Chat settings
-                        'system_prompt': 'system_prompt',
-                        'top_k_rag_hits': 'top_k',
-                        'prompt_style': 'prompt_style',
-                        'custom_style_modifier': 'custom_style_modifier',
-                        'model': 'model',
-                        'temperature': 'temperature',
-                        'max_tokens': 'max_tokens',
-                        'presence_penalty': 'presence_penalty',
-                        'frequency_penalty': 'frequency_penalty',
-                        'conversation_history_limit': 'conversation_history_limit',
-                        
-                        // Memory settings
-                        'SESSION_MEMORY_CHAR_LIMIT': 'session_memory_char_limit',
-                        'PERSISTENT_MEMORY_CHAR_LIMIT': 'persistent_memory_char_limit',
-                        'MAX_PROMPT_CHARS': 'max_prompt_chars',
-                        'RAG_CONTEXT_CHAR_LIMIT': 'rag_context_char_limit',
-                        
-                        // Compression settings
-                        'PERSISTENT_MEMORY_COMPRESSION_RATIO': 'persistent_memory_compression_ratio',
-                        'PERSISTENT_MEMORY_COMPRESSION_MODEL': 'persistent_memory_compression_model',
-                        'PERSISTENT_MEMORY_MIN_SIZE': 'persistent_memory_min_size',
-                        
-                        // Summary settings
-                        'SUMMARY_TEMPERATURE': 'summary_temperature',
-                        
-                        // Feature flags
-                        'AUTO_SUMMARY_ENABLED': 'auto_summary_enabled',
-                        'AUTO_COMPRESSION_ENABLED': 'auto_compression_enabled',
-                        
-                        // Prompts
-                        'SESSION_SUMMARY_PROMPT': 'session_summary_prompt',
-                        'PERSISTENT_MEMORY_COMPRESSION_PROMPT': 'persistent_memory_compression_prompt'
-                    }};
-                    
-                    // Update form fields with loaded config
-                    for (const [configKey, formName] of Object.entries(fieldMapping)) {{
-                        const value = config[configKey];
-                        if (value !== undefined && value !== null) {{
-                            const element = document.querySelector(`[name="${{formName}}"]`);
-                            if (element) {{
-                                if (element.type === 'checkbox') {{
-                                    element.checked = value;
-                                }} else if (element.type === 'range') {{
-                                    element.value = value;
-                                    // Update the display value
-                                    const displayId = element.id || element.name;
-                                    const valueDisplay = document.getElementById(displayId.replace('persistent_memory_compression_ratio', 'compression-ratio').replace('summary_temperature', 'summary-temp') + '-value');
-                                    if (valueDisplay) {{
-                                        valueDisplay.textContent = value;
-                                    }}
-                                }} else {{
-                                    element.value = value;
-                                }}
-                            }}
-                        }}
-                    }}
-                    
-                    toggleCustomStyle();
-                    
-                    // Show success message
-                    alert('Configuration loaded successfully!');
-                }} else {{
-                    alert('Failed to load configuration. Check your token.');
-                }}
-            }} catch (error) {{
-                console.error('Error loading config:', error);
-                alert('Error loading configuration');
-            }}
-        }});
         
         // For production, adjust API URL
         if (window.location.hostname !== 'localhost') {{
@@ -659,11 +541,8 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
         
         // Add save functionality via JavaScript
         async function saveConfigViaAjax() {{
-            const authToken = document.querySelector('input[name="auth_token"]').value;
-            if (!authToken) {{
-                alert('Please enter your auth token first');
-                return;
-            }}
+            // For dashboard usage, we'll need to handle auth differently
+            // This is a simplified version - in production you'd get auth from session
             
             // Gather all form values
             const config = {{
@@ -706,14 +585,10 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
             }};
             
             try {{
-                const baseUrl = window.location.hostname === 'localhost' 
-                    ? 'http://localhost:8011' 
-                    : '/api/storage';
-                    
-                const response = await fetch(`${{baseUrl}}/api/memory/runtime-config`, {{
+                // Use the dashboard's save endpoint which handles auth internally
+                const response = await fetch('/dashboard/api/save-config', {{
                     method: 'POST',
                     headers: {{
-                        'Authorization': authToken.startsWith('Bearer ') ? authToken : `Bearer ${{authToken}}`,
                         'Content-Type': 'application/json'
                     }},
                     body: JSON.stringify(config)

@@ -1,35 +1,51 @@
-# memory/persistent_compression.py
 """
 Persistent memory compression logic
-Based on Mobeus architecture
 """
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
 import re
-from config import runtime_config
-from .persistent_memory import get_summary, clear_summary
+import config.runtime_config as runtime_config
+from .compression_prompts import get_compression_prompt, get_extraction_prompt
+from .persistent_memory import get_summary
 from .db import get_connection, execute_db_operation
 from .session_memory import log_summarization_event
 
+
 def get_persistent_memory_limit() -> int:
     """Get persistent memory character limit from config"""
+    # Default to 8000 chars to leave room for session memory and RAG context
     return runtime_config.get("PERSISTENT_MEMORY_CHAR_LIMIT", 8000)
+
 
 def get_compression_ratio() -> float:
     """Get target compression ratio from config"""
+    # Default to 0.6 (compress to 60% of original size)
     return runtime_config.get("PERSISTENT_MEMORY_COMPRESSION_RATIO", 0.6)
+
 
 def get_compression_model() -> str:
     """Get model to use for compression"""
+    # Could use a cheaper model for compression
     return runtime_config.get("PERSISTENT_MEMORY_COMPRESSION_MODEL", "gpt-4")
+
 
 def get_min_compression_size() -> int:
     """Get minimum size before we stop compressing"""
+    # Don't compress below 1000 chars
     return runtime_config.get("PERSISTENT_MEMORY_MIN_SIZE", 1000)
+
 
 def get_max_compressions() -> int:
     """Get maximum number of compressions allowed"""
+    # Prevent over-compression
     return runtime_config.get("PERSISTENT_MEMORY_MAX_COMPRESSIONS", 3)
+
+
+def get_persistent_memory_size(uuid: str) -> int:
+    """Get the current size of persistent memory for a user"""
+    summary = get_summary(uuid)
+    return len(summary) if summary else 0
+
 
 def get_compression_count(summary: str) -> int:
     """
@@ -58,42 +74,44 @@ def get_compression_count(summary: str) -> int:
     
     return 0
 
-def check_and_compress_persistent_memory(user_id: str) -> bool:
+
+def check_and_compress_persistent_memory(uuid: str) -> bool:
     """
     Check if persistent memory needs compression and perform it if necessary
     
     Returns:
         True if compression was performed, False otherwise
     """
-    current_size = get_persistent_memory_size(user_id)
+    current_size = get_persistent_memory_size(uuid)
     limit = get_persistent_memory_limit()
     
     # Check if we need compression
     if current_size < (limit * 0.9):
         return False
     
-    # Check compression count
-    current_summary = get_summary(user_id)
-    compression_count = get_compression_count(current_summary)
+    # Check compression count (for logging only, not limiting)
+    current_summary = get_summary(uuid)
+    compression_count = get_compression_count(current_summary or "")
     
     # Log compression count but don't limit
-    if compression_count >= get_max_compressions():
-        print(f"📊 High compression count ({compression_count}) for {user_id}. Memory has been compressed multiple times.")
+    if compression_count >= 3:
+        print(f"📊 High compression count ({compression_count}) for {uuid}. Memory has been compressed multiple times.")
     
     # Check minimum size
     if current_size < get_min_compression_size():
-        print(f"⚠️ Persistent memory for {user_id} is below minimum size ({current_size} chars). Skipping compression.")
+        print(f"⚠️ Persistent memory for {uuid} is below minimum size ({current_size} chars). Skipping compression.")
         return False
     
-    print(f"📝 Persistent memory for {user_id} approaching limit ({current_size}/{limit} chars). Triggering compression...")
-    return compress_persistent_memory(user_id, compression_count)
+    print(f"📝 Persistent memory for {uuid} approaching limit ({current_size}/{limit} chars). Triggering compression...")
+    return compress_persistent_memory(uuid, compression_count)
 
-def compress_persistent_memory(user_id: str, current_compression_count: int = 0) -> bool:
+
+def compress_persistent_memory(uuid: str, current_compression_count: int = 0) -> bool:
     """
     Compress persistent memory by creating a summary of summaries
     
     Args:
-        user_id: User ID
+        uuid: User UUID
         current_compression_count: Number of times this memory has been compressed
         
     Returns:
@@ -103,15 +121,15 @@ def compress_persistent_memory(user_id: str, current_compression_count: int = 0)
     backup_summary = None
     
     try:
-        current_summary = get_summary(user_id)
+        current_summary = get_summary(uuid)
         if not current_summary:
-            print(f"⚠️ No persistent memory to compress for {user_id}")
+            print(f"⚠️ No persistent memory to compress for {uuid}")
             return False
         
         # CRITICAL: Store backup before any operations
         backup_summary = current_summary
         original_size = len(current_summary)
-        print(f"📝 COMPRESSING PERSISTENT MEMORY for {user_id}: {original_size} chars (compression #{current_compression_count + 1})")
+        print(f"📝 COMPRESSING PERSISTENT MEMORY for {uuid}: {original_size} chars (compression #{current_compression_count + 1})")
         
         # Generate compressed summary using OpenAI
         compressed_summary, metadata = generate_compressed_summary(
@@ -121,12 +139,12 @@ def compress_persistent_memory(user_id: str, current_compression_count: int = 0)
         
         # Validate compressed summary before proceeding
         if not compressed_summary or not compressed_summary.strip():
-            print(f"❌ Compressed summary is empty or invalid for {user_id}")
+            print(f"❌ Compressed summary is empty or invalid for {uuid}")
             return False
         
         # Ensure compressed summary actually contains content
         if len(compressed_summary) < 10:  # Minimum reasonable summary length
-            print(f"❌ Compressed summary too short ({len(compressed_summary)} chars) for {user_id}")
+            print(f"❌ Compressed summary too short ({len(compressed_summary)} chars) for {uuid}")
             return False
         
         # Add compression marker with count
@@ -138,19 +156,19 @@ def compress_persistent_memory(user_id: str, current_compression_count: int = 0)
         compressed_with_marker = f"{compression_marker}\n\n{compressed_summary}"
         
         # CRITICAL: Use atomic operation to replace memory
-        success = _atomic_replace_summary(user_id, compressed_with_marker, backup_summary)
+        success = _atomic_replace_summary(uuid, compressed_with_marker, backup_summary)
         
         if not success:
-            print(f"❌ Failed to atomically replace summary for {user_id}")
+            print(f"❌ Failed to atomically replace summary for {uuid}")
             return False
         
         compressed_size = len(compressed_with_marker)
         compression_ratio = compressed_size / original_size if original_size > 0 else 1
         
-        print(f"✅ Persistent memory compressed for {user_id}: {original_size} -> {compressed_size} chars ({compression_ratio:.2%})")
+        print(f"✅ Persistent memory compressed for {uuid}: {original_size} -> {compressed_size} chars ({compression_ratio:.2%})")
         
-        # Log the compression event - need a dummy session_id for now
-        log_summarization_event(user_id, "system_compression", "persistent_memory_compression", {
+        # Log the compression event with detailed metadata
+        log_summarization_event(uuid, "persistent_memory_compression", {
             "chars_before": original_size,
             "chars_after": compressed_size,
             "compression_ratio": compression_ratio,
@@ -162,25 +180,26 @@ def compress_persistent_memory(user_id: str, current_compression_count: int = 0)
         })
         
         # Track compression in database
-        _track_compression_event(user_id, original_size, compressed_size, current_compression_count + 1)
+        _track_compression_event(uuid, original_size, compressed_size, current_compression_count + 1)
         
         return True
             
     except Exception as e:
-        print(f"❌ Error compressing persistent memory for {user_id}: {e}")
+        print(f"❌ Error compressing persistent memory for {uuid}: {e}")
         import traceback
         traceback.print_exc()
         
         # CRITICAL: Attempt to restore backup if available
         if backup_summary:
-            print(f"🔄 Attempting to restore backup for {user_id}")
+            print(f"🔄 Attempting to restore backup for {uuid}")
             try:
-                _store_compressed_summary(user_id, backup_summary)
-                print(f"✅ Backup restored successfully for {user_id}")
+                _store_compressed_summary(uuid, backup_summary)
+                print(f"✅ Backup restored successfully for {uuid}")
             except Exception as restore_error:
-                print(f"❌ CRITICAL: Failed to restore backup for {user_id}: {restore_error}")
+                print(f"❌ CRITICAL: Failed to restore backup for {uuid}: {restore_error}")
         
         return False
+
 
 def generate_compressed_summary(current_summary: str, compression_count: int = 0) -> Tuple[Optional[str], Dict[str, Any]]:
     """
@@ -196,31 +215,26 @@ def generate_compressed_summary(current_summary: str, compression_count: int = 0
     
     try:
         from openai import OpenAI
-        import os
+        from config import OPENAI_API_KEY
         
-        # Initialize OpenAI client
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            print(f"❌ OPENAI_API_KEY not found in environment")
+        if not OPENAI_API_KEY:
+            print(f"❌ OpenAI API key not configured")
             return None, {"error": "Missing API key"}
         
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=OPENAI_API_KEY)
         
         # Get configuration
         model = get_compression_model()
-        temperature = runtime_config.get("SUMMARY_TEMPERATURE", 0.3)
+        temperature = runtime_config.get("TEMPERATURE", 0.3)
         compression_ratio = get_compression_ratio()
         
-        # Get compression prompt
-        prompt_template = runtime_config.get("PERSISTENT_MEMORY_COMPRESSION_PROMPT")
+        # Get appropriate prompt based on compression count
+        prompt_template = get_compression_prompt(compression_count, compression_ratio)
         if not prompt_template:
-            print(f"❌ Missing PERSISTENT_MEMORY_COMPRESSION_PROMPT in config")
+            print(f"❌ Failed to get compression prompt template")
             return None, {"error": "Missing prompt template"}
         
-        prompt = prompt_template.format(
-            current_summary=current_summary,
-            compression_ratio=int((1 - compression_ratio) * 100)
-        )
+        prompt = prompt_template.format(current_summary=current_summary)
         
         # Track timing
         start_time = datetime.now()
@@ -281,13 +295,14 @@ def generate_compressed_summary(current_summary: str, compression_count: int = 0
         traceback.print_exc()
         return None, {"error": str(e)}
 
-def _atomic_replace_summary(user_id: str, new_summary: str, backup_summary: str) -> bool:
+
+def _atomic_replace_summary(uuid: str, new_summary: str, backup_summary: str) -> bool:
     """
     Atomically replace persistent memory with new summary.
     Uses a database transaction to ensure either complete success or rollback.
     
     Args:
-        user_id: User ID
+        uuid: User UUID
         new_summary: New compressed summary to store
         backup_summary: Original summary for verification
         
@@ -303,38 +318,38 @@ def _atomic_replace_summary(user_id: str, new_summary: str, backup_summary: str)
                     
                     # Verify current summary matches our backup (ensure no concurrent modifications)
                     cur.execute(
-                        "SELECT summary FROM persistent_memory WHERE user_id = %s FOR UPDATE",
-                        (user_id,)
+                        "SELECT summary FROM persistent_memory WHERE uuid = %s FOR UPDATE",
+                        (uuid,)
                     )
                     row = cur.fetchone()
                     current_db_summary = row[0] if row and row[0] else None
                     
                     if current_db_summary != backup_summary:
-                        print(f"⚠️ Summary mismatch detected for {user_id}. Aborting compression.")
+                        print(f"⚠️ Summary mismatch detected for {uuid}. Aborting compression.")
                         conn.rollback()
                         return False
                     
                     # Update with new compressed summary
                     cur.execute(
                         """
-                        INSERT INTO persistent_memory (user_id, summary)
+                        INSERT INTO persistent_memory (uuid, summary)
                         VALUES (%s, %s)
-                        ON CONFLICT (user_id) DO UPDATE
+                        ON CONFLICT (uuid) DO UPDATE
                         SET summary = EXCLUDED.summary,
                             updated_at = CURRENT_TIMESTAMP
-                        """, (user_id, new_summary)
+                        """, (uuid, new_summary)
                     )
                     
                     # Verify the update was successful
                     cur.execute(
-                        "SELECT summary FROM persistent_memory WHERE user_id = %s",
-                        (user_id,)
+                        "SELECT summary FROM persistent_memory WHERE uuid = %s",
+                        (uuid,)
                     )
                     row = cur.fetchone()
                     stored_summary = row[0] if row and row[0] else None
                     
                     if stored_summary != new_summary:
-                        print(f"❌ Failed to verify stored summary for {user_id}")
+                        print(f"❌ Failed to verify stored summary for {uuid}")
                         conn.rollback()
                         return False
                     
@@ -343,47 +358,69 @@ def _atomic_replace_summary(user_id: str, new_summary: str, backup_summary: str)
                     return True
                     
             except Exception as e:
-                print(f"❌ Error in atomic replace for {user_id}: {e}")
+                print(f"❌ Error in atomic replace for {uuid}: {e}")
                 conn.rollback()
                 return False
     
     try:
         return execute_db_operation(_atomic_replace_impl)
     except Exception as e:
-        print(f"❌ Failed to execute atomic replace for {user_id}: {e}")
+        print(f"❌ Failed to execute atomic replace for {uuid}: {e}")
         return False
 
-def _store_compressed_summary(user_id: str, compressed_summary: str):
+
+def _store_compressed_summary(uuid: str, compressed_summary: str):
     """Store compressed summary in persistent memory"""
     def _store_impl():
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO persistent_memory (user_id, summary)
+                    INSERT INTO persistent_memory (uuid, summary)
                     VALUES (%s, %s)
-                    ON CONFLICT (user_id) DO UPDATE
+                    ON CONFLICT (uuid) DO UPDATE
                     SET summary = EXCLUDED.summary,
                         updated_at = CURRENT_TIMESTAMP
-                    """, (user_id, compressed_summary)
+                    """, (uuid, compressed_summary)
                 )
                 conn.commit()
     
     execute_db_operation(_store_impl)
 
-def _track_compression_event(user_id: str, original_size: int, compressed_size: int, compression_count: int):
+
+def _track_compression_event(uuid: str, original_size: int, compressed_size: int, compression_count: int):
     """Track compression event in database for analytics"""
     def _track_impl():
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Ensure compression_events table exists
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS compression_events (
+                        id SERIAL PRIMARY KEY,
+                        uuid TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        original_size INTEGER,
+                        compressed_size INTEGER,
+                        compression_ratio FLOAT,
+                        compression_count INTEGER,
+                        model_used VARCHAR(100)
+                    );
+                """)
+                
+                # Create index if not exists
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_compression_events_uuid 
+                    ON compression_events(uuid);
+                """)
+                
                 # Insert compression event
                 compression_ratio = compressed_size / original_size if original_size > 0 else 1
                 cur.execute("""
                     INSERT INTO compression_events 
-                    (user_id, original_size, compressed_size, compression_ratio, compression_count, model_used)
+                    (uuid, original_size, compressed_size, compression_ratio, compression_count, model_used)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """, (
-                    user_id,
+                    uuid,
                     original_size,
                     compressed_size,
                     compression_ratio,
@@ -397,11 +434,23 @@ def _track_compression_event(user_id: str, original_size: int, compressed_size: 
     except Exception as e:
         print(f"⚠️ Failed to track compression event: {e}")
 
-def get_compression_stats(user_id: str) -> Dict[str, Any]:
+
+def get_compression_stats(uuid: str) -> Dict[str, Any]:
     """Get compression statistics for a user"""
     def _get_stats():
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Check if table exists first
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'compression_events'
+                    );
+                """)
+                
+                if not cur.fetchone()[0]:
+                    return {}
+                
                 # Get compression stats
                 cur.execute("""
                     SELECT 
@@ -411,8 +460,8 @@ def get_compression_stats(user_id: str) -> Dict[str, Any]:
                         MAX(compression_count) as max_compression_count,
                         MAX(created_at) as last_compression
                     FROM compression_events
-                    WHERE user_id = %s
-                """, (user_id,))
+                    WHERE uuid = %s
+                """, (uuid,))
                 
                 row = cur.fetchone()
                 if row:
@@ -430,8 +479,3 @@ def get_compression_stats(user_id: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"⚠️ Error getting compression stats: {e}")
         return {}
-
-def get_persistent_memory_size(user_id: str) -> int:
-    """Get the current size of persistent memory for a user"""
-    summary = get_summary(user_id)
-    return len(summary) if summary else 0
