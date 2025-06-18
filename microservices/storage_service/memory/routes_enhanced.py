@@ -307,35 +307,74 @@ def get_session_review(uuid: str):
     }
 
 # Runtime configuration endpoints
-@router.get("/runtime-config", response_model=RuntimeConfig)
+@router.get("/runtime-config")
 def get_runtime_config():
-    """Get runtime configuration"""
-    return {
-        "system_prompt": runtime_config.get("SYSTEM_PROMPT", "Hi, I'm Xavigate..."),
-        "conversation_history_limit": runtime_config.get("CONVERSATION_HISTORY_LIMIT", 3),
-        "top_k_rag_hits": runtime_config.get("TOP_K_RAG_HITS", 4),
-        "prompt_style": runtime_config.get("PROMPT_STYLE", "default"),
-        "custom_style_modifier": runtime_config.get("CUSTOM_STYLE_MODIFIER", None),
-        "temperature": runtime_config.get("TEMPERATURE", 0.7),
-        "max_tokens": runtime_config.get("MAX_TOKENS", 1000),
-        "presence_penalty": runtime_config.get("PRESENCE_PENALTY", 0.1),
-        "frequency_penalty": runtime_config.get("FREQUENCY_PENALTY", 0.1),
-        "model": runtime_config.get("MODEL", "gpt-3.5-turbo"),
-    }
+    """Get runtime configuration - returns all stored config values"""
+    # Get all config values from runtime_config
+    config_dict = {}
+    
+    # Chat settings
+    config_dict["system_prompt"] = runtime_config.get("SYSTEM_PROMPT", "Hi, I'm Xavigate...")
+    config_dict["conversation_history_limit"] = runtime_config.get("CONVERSATION_HISTORY_LIMIT", 3)
+    config_dict["top_k_rag_hits"] = runtime_config.get("TOP_K_RAG_HITS", 4)
+    config_dict["prompt_style"] = runtime_config.get("PROMPT_STYLE", "default")
+    config_dict["custom_style_modifier"] = runtime_config.get("CUSTOM_STYLE_MODIFIER", None)
+    config_dict["temperature"] = runtime_config.get("TEMPERATURE", 0.7)
+    config_dict["max_tokens"] = runtime_config.get("MAX_TOKENS", 1000)
+    config_dict["presence_penalty"] = runtime_config.get("PRESENCE_PENALTY", 0.1)
+    config_dict["frequency_penalty"] = runtime_config.get("FREQUENCY_PENALTY", 0.1)
+    config_dict["model"] = runtime_config.get("MODEL", "gpt-3.5-turbo")
+    
+    # Memory settings
+    config_dict["SESSION_MEMORY_CHAR_LIMIT"] = runtime_config.get("SESSION_MEMORY_CHAR_LIMIT", 15000)
+    config_dict["PERSISTENT_MEMORY_CHAR_LIMIT"] = runtime_config.get("PERSISTENT_MEMORY_CHAR_LIMIT", 8000)
+    config_dict["MAX_PROMPT_CHARS"] = runtime_config.get("MAX_PROMPT_CHARS", 20000)
+    config_dict["RAG_CONTEXT_CHAR_LIMIT"] = runtime_config.get("RAG_CONTEXT_CHAR_LIMIT", 4000)
+    
+    # Compression settings
+    config_dict["PERSISTENT_MEMORY_COMPRESSION_RATIO"] = runtime_config.get("PERSISTENT_MEMORY_COMPRESSION_RATIO", 0.6)
+    config_dict["PERSISTENT_MEMORY_COMPRESSION_MODEL"] = runtime_config.get("PERSISTENT_MEMORY_COMPRESSION_MODEL", "gpt-4")
+    config_dict["PERSISTENT_MEMORY_MIN_SIZE"] = runtime_config.get("PERSISTENT_MEMORY_MIN_SIZE", 1000)
+    
+    # Summary settings
+    config_dict["SUMMARY_TEMPERATURE"] = runtime_config.get("SUMMARY_TEMPERATURE", 0.3)
+    
+    # Feature flags
+    config_dict["AUTO_SUMMARY_ENABLED"] = runtime_config.get("AUTO_SUMMARY_ENABLED", True)
+    config_dict["AUTO_COMPRESSION_ENABLED"] = runtime_config.get("AUTO_COMPRESSION_ENABLED", True)
+    
+    # Prompts
+    config_dict["SESSION_SUMMARY_PROMPT"] = runtime_config.get("SESSION_SUMMARY_PROMPT", "")
+    config_dict["PERSISTENT_MEMORY_COMPRESSION_PROMPT"] = runtime_config.get("PERSISTENT_MEMORY_COMPRESSION_PROMPT", "")
+    
+    return config_dict
 
 @router.post("/runtime-config")
-def update_runtime_config(cfg: RuntimeConfig):
-    """Update runtime configuration"""
-    runtime_config.set_config("SYSTEM_PROMPT", cfg.system_prompt)
-    runtime_config.set_config("CONVERSATION_HISTORY_LIMIT", cfg.conversation_history_limit)
-    runtime_config.set_config("TOP_K_RAG_HITS", cfg.top_k_rag_hits)
-    runtime_config.set_config("PROMPT_STYLE", cfg.prompt_style)
-    runtime_config.set_config("CUSTOM_STYLE_MODIFIER", cfg.custom_style_modifier)
-    runtime_config.set_config("TEMPERATURE", cfg.temperature)
-    runtime_config.set_config("MAX_TOKENS", cfg.max_tokens)
-    runtime_config.set_config("PRESENCE_PENALTY", cfg.presence_penalty)
-    runtime_config.set_config("FREQUENCY_PENALTY", cfg.frequency_penalty)
-    runtime_config.set_config("MODEL", cfg.model)
+def update_runtime_config(cfg: Dict[str, Any]):
+    """Update runtime configuration - accepts any configuration fields"""
+    # Update all provided configuration values
+    for key, value in cfg.items():
+        if value is not None:  # Only update non-None values
+            runtime_config.set_config(key, value)
+    
+    # For backwards compatibility, also set uppercase versions of lowercase keys
+    key_mappings = {
+        "system_prompt": "SYSTEM_PROMPT",
+        "conversation_history_limit": "CONVERSATION_HISTORY_LIMIT",
+        "top_k_rag_hits": "TOP_K_RAG_HITS",
+        "prompt_style": "PROMPT_STYLE",
+        "custom_style_modifier": "CUSTOM_STYLE_MODIFIER",
+        "temperature": "TEMPERATURE",
+        "max_tokens": "MAX_TOKENS",
+        "presence_penalty": "PRESENCE_PENALTY",
+        "frequency_penalty": "FREQUENCY_PENALTY",
+        "model": "MODEL"
+    }
+    
+    for lower_key, upper_key in key_mappings.items():
+        if lower_key in cfg and cfg[lower_key] is not None:
+            runtime_config.set_config(upper_key, cfg[lower_key])
+    
     return {"status": "ok"}
 
 # Memory stats endpoint (new)

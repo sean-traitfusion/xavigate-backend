@@ -1,7 +1,9 @@
 import os
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from analytics_routes import router as analytics_router
+from dashboard_routes import router as dashboard_router
 
 # Load .env from root and service-level
 root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
@@ -26,6 +28,10 @@ app = FastAPI(
 )
 
 app.include_router(analytics_router, prefix="/stats")
+app.include_router(dashboard_router, prefix="/dashboard")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
 @app.get("/health")
 def health():

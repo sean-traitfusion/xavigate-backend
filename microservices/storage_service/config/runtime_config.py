@@ -10,6 +10,7 @@ from pathlib import Path
 
 # In-memory config store
 _config_store: Dict[str, Any] = {}
+_is_initialized: bool = False
 
 # Default configuration values
 DEFAULT_CONFIG = {
@@ -121,8 +122,9 @@ Remember: You're not just answering questions - you're helping them understand h
 
 def _load_from_env():
     """Load configuration from environment variables"""
-    global _config_store
+    global _config_store, _is_initialized
     _config_store = DEFAULT_CONFIG.copy()
+    _is_initialized = True
     
     # First, try to load from .env file directly for multiline strings
     _load_multiline_from_env_file()
@@ -224,26 +226,27 @@ def _load_multiline_from_env_file(filepath: str = ".env"):
 
 def get(key: str, default: Any = None) -> Any:
     """Get a configuration value"""
-    if not _config_store:
+    if not _is_initialized:
         _load_from_env()
     return _config_store.get(key, default)
 
 def set_config(key: str, value: Any) -> None:
     """Set a configuration value"""
-    if not _config_store:
+    if not _is_initialized:
         _load_from_env()
     _config_store[key] = value
 
 def all_config() -> Dict[str, Any]:
     """Get all configuration values"""
-    if not _config_store:
+    if not _is_initialized:
         _load_from_env()
     return _config_store.copy()
 
 def reset_to_defaults() -> None:
     """Reset all configuration to default values"""
-    global _config_store
+    global _config_store, _is_initialized
     _config_store = DEFAULT_CONFIG.copy()
+    _is_initialized = True  # Important: mark as initialized to prevent reload from env
 
 # Force initialization on import
 _config_store = {}

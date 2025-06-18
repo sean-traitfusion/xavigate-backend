@@ -26,6 +26,9 @@ chroma_db/
 # Memory + session files
 backend/memory/data/*.json
 backend/memory/data/*.jsonl
+backend/project_docs/config_dasboard_workingex.py
+backend/project_docs/persistent_compression_workingex.py
+
 
 # Embedding cache
 data/embedding_cache.json
