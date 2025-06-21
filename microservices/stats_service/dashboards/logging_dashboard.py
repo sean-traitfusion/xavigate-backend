@@ -256,7 +256,7 @@ def get_logging_dashboard_content() -> str:
                 logsContainer.innerHTML = '<div class="loading">Loading logs...</div>';
                 
                 try {
-                    const response = await fetch(baseUrl + '/api/logging/all-interactions?limit=' + limit + '&offset=0');
+                    const response = await fetch(baseUrl + '/logging/all-interactions?limit=' + limit + '&offset=0');
                     
                     if (!response.ok) {
                         const errorText = await response.text();
@@ -401,7 +401,7 @@ def get_logging_dashboard_content() -> str:
             
             async function loadMore() {
                 try {
-                    const response = await fetch(baseUrl + '/api/logging/all-interactions?limit=' + limit + '&offset=' + currentOffset);
+                    const response = await fetch(baseUrl + '/logging/all-interactions?limit=' + limit + '&offset=' + currentOffset);
                     
                     if (!response.ok) {
                         throw new Error('Failed to fetch more logs');
@@ -480,7 +480,7 @@ def get_logging_dashboard_content() -> str:
             async function loadPromptDetails(userId, timestamp) {
                 try {
                     console.log(`Loading prompt details for user: ${userId}, timestamp: ${timestamp}`);
-                    const response = await fetch(baseUrl + '/api/logging/prompts/' + userId + '?limit=10');
+                    const response = await fetch(baseUrl + '/logging/prompts/' + userId + '?limit=10');
                     
                     if (!response.ok) {
                         throw new Error('Failed to fetch prompt details: ' + response.statusText);

@@ -348,7 +348,7 @@ def get_base_template(title: str, content: str, active_section: str = "config") 
             // Handle navigation for both local and production environments
             document.addEventListener('DOMContentLoaded', function() {{
                 const isProduction = window.location.hostname !== 'localhost';
-                const baseUrl = isProduction ? '/admin' : '/dashboard';
+                const baseUrl = isProduction ? '/system-admin' : '/dashboard';
                 
                 // Update all nav links
                 document.querySelectorAll('.nav-link').forEach(link => {{
