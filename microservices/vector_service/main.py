@@ -25,7 +25,7 @@ from chromadb import PersistentClient
 # Initialize Chroma client pointing to local Chroma DB path
 CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "chroma_db")
 client = PersistentClient(path=CHROMA_DB_PATH)
-# Use the same collection name as the RAG service
+# Use the same collection name as the ingestion scripts
 collection = client.get_or_create_collection(name="xavigate_knowledge")
 
 class VectorSearchRequest(BaseModel):
@@ -59,11 +59,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "vector"}
+
 @app.post("/search", response_model=List[VectorChunk], tags=["vector"])
 async def vector_search(body: VectorSearchRequest):
+    # Debug logging
+    print(f"Debug - Vector search request: query='{body.query}', top_k={body.top_k}, ENV={ENV}")
+    
     # In dev mode, return static sample chunks
     if ENV == "dev":
-        return [
+        sample_chunks = [
             VectorChunk(
                 title="Creative",
                 chunk="Creative is the energy of imagination, originality, and expression.",
@@ -83,6 +90,8 @@ async def vector_search(body: VectorSearchRequest):
                 score=0.85,
             ),
         ]
+        print(f"Debug - Returning {len(sample_chunks)} dev mode chunks")
+        return sample_chunks
         
     # 1. Embed the query
     try:
@@ -124,6 +133,10 @@ async def vector_search(body: VectorSearchRequest):
     docs = results.get("documents", [[]])[0]
     metadatas = results.get("metadatas", [[]])[0]
     distances = results.get("distances", [[]])[0]
+    
+    print(f"Debug - Query returned {len(docs)} documents")
+    if docs:
+        print(f"Debug - First doc preview: {str(docs[0])[:100]}...")
 
     chunks: List[VectorChunk] = []
     for text, meta, dist in zip(docs, metadatas, distances):
@@ -134,7 +147,8 @@ async def vector_search(body: VectorSearchRequest):
             topic=meta.get("type", ""),  # Use type as topic
             score=round(score, 4),
         ))
-
+    
+    print(f"Debug - Returning {len(chunks)} formatted chunks")
     return chunks
 
 @app.get("/debug/embedding", tags=["debug"])

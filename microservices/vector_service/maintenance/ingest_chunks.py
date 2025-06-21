@@ -17,8 +17,11 @@ collection = client.get_or_create_collection(name="xavigate_knowledge")
 print(f"🔧 Using ChromaDB path: {CHROMA_DB_PATH}")
 print(f"📊 Initial collection count: {collection.count()}")
 
-# Load chunks from file
+# Load chunks from file - try both possible filenames
 chunks_path = Path(__file__).parent / "bulk_chunks_all_cleaned.jsonl"
+if not chunks_path.exists():
+    chunks_path = Path(__file__).parent / "bulk_chunks_all.jsonl"
+    
 print(f"📁 Loading chunks from: {chunks_path}")
 
 if not chunks_path.exists():

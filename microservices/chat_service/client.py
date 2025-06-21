@@ -3,7 +3,7 @@ import httpx
 
 # Service URLs (override via environment variables)
 AUTH_URL = os.getenv("AUTH_URL", "http://localhost:8014")
-RAG_URL = os.getenv("RAG_URL", "http://localhost:8010")
+VECTOR_URL = os.getenv("VECTOR_URL", "http://localhost:8010")
 STORAGE_URL = os.getenv("STORAGE_URL", "http://localhost:8011")
 STATS_URL = os.getenv("STATS_URL", "http://localhost:8012")
 
@@ -33,7 +33,7 @@ async def rag_query(prompt: str, top_k: int = 3, tags: str | None = None) -> str
     if tags:
         params["tags"] = tags
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{RAG_URL}/rag/query", params=params)
+        response = await client.get(f"{VECTOR_URL}/rag/query", params=params)
         response.raise_for_status()
         data = response.json()
         return data.get("result", "")

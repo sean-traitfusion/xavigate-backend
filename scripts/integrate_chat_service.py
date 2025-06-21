@@ -55,7 +55,7 @@ async def chat_endpoint_enhanced(
         
         # 4. Get RAG context
         vs_resp = await client.post(
-            f"{RAG_URL}/search", 
+            f"{VECTOR_URL}/search", 
             json={"query": req.message, "top_k": top_k}
         )
         if vs_resp.status_code != 200:

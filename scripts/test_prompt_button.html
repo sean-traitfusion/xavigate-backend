@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Prompt Button</title>
+</head>
+<body>
+    <h1>Test Prompt Details Button</h1>
+    <button onclick="testPromptDetails()">Test Load Prompt Details</button>
+    <div id="result"></div>
+
+    <script>
+        async function testPromptDetails() {
+            const userId = 'debug-test-user';
+            const timestamp = '2025-06-21T04:24:27.265196';
+            const baseUrl = 'http://localhost:8011';
+            
+            console.log(`Testing prompt details for user: ${userId}, timestamp: ${timestamp}`);
+            
+            try {
+                const response = await fetch(baseUrl + '/api/logging/prompts/' + userId + '?limit=10');
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch: ' + response.statusText);
+                }
+                
+                const data = await response.json();
+                console.log('Response:', data);
+                
+                // Find prompt with closest timestamp
+                const targetTime = new Date(timestamp).getTime();
+                let closestPrompt = null;
+                let closestDiff = Infinity;
+                
+                data.prompts.forEach(p => {
+                    const promptTime = new Date(p.timestamp).getTime();
+                    const diff = Math.abs(promptTime - targetTime);
+                    console.log(`Prompt time: ${p.timestamp}, diff: ${diff}ms`);
+                    if (diff < closestDiff && diff < 10000) {
+                        closestDiff = diff;
+                        closestPrompt = p;
+                    }
+                });
+                
+                if (closestPrompt) {
+                    document.getElementById('result').innerHTML = `
+                        <h2>Found Prompt!</h2>
+                        <p>Timestamp diff: ${closestDiff}ms</p>
+                        <p>System prompt: ${closestPrompt.system_prompt ? 'Present' : 'Missing'}</p>
+                        <p>Session context: ${closestPrompt.session_context || 'Empty'}</p>
+                        <p>Persistent summary: ${closestPrompt.persistent_summary || 'Empty'}</p>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML = '<p>No matching prompt found</p>';
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = `<p style="color:red">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

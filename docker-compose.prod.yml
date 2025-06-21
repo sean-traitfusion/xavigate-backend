@@ -126,7 +126,7 @@ services:
       - ./microservices/shared:/app/shared
     environment:
       ENV: prod
-      RAG_URL: http://vector_service:8017
+      VECTOR_URL: http://vector_service:8017
       STORAGE_URL: http://storage_service:8011
       AUTH_SERVICE_URL: http://auth_service:8014
     networks:

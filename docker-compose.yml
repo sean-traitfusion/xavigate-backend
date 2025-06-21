@@ -103,7 +103,7 @@ services:
       - ./microservices/chat_service:/app
       - ./microservices/shared:/app/shared
     environment:
-      RAG_URL: http://vector_service:8017
+      VECTOR_URL: http://vector_service:8017
       STORAGE_URL: http://storage_service:8011
     networks:
       - xavigate

@@ -168,11 +168,14 @@ def upsert_session(mem: SessionMemory):
     
     # Convert to new format and use memory client
     exchanges = mem.conversation_log.get("exchanges", [])
+    session_id = mem.conversation_log.get("session_id", mem.uuid)  # Use uuid as session_id if not provided
+    user_id = mem.conversation_log.get("user_id", "unknown")  # Get user_id from conversation_log
+    
     for exchange in exchanges:
         if "user_prompt" in exchange:
-            memory_client.log_interaction(mem.uuid, "user", exchange["user_prompt"])
+            memory_client.log_interaction(user_id, session_id, "user", exchange["user_prompt"])
         if "assistant_response" in exchange:
-            memory_client.log_interaction(mem.uuid, "assistant", exchange["assistant_response"])
+            memory_client.log_interaction(user_id, session_id, "assistant", exchange["assistant_response"])
     
     return {"status": "session memory updated"}
 
