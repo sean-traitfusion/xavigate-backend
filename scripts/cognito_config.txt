@@ -1,0 +1,5 @@
+# Based on your JWT token, add these to your .env file:
+
+COGNITO_REGION=us-east-1
+COGNITO_USER_POOL_ID=us-east-1_csH9tZFJF
+COGNITO_APP_CLIENT_ID=56352i5933v40t36u1fqs2fe3e

@@ -104,23 +104,29 @@ def initialize_memory_tables():
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS session_memory (
                     id SERIAL PRIMARY KEY,
-                    uuid VARCHAR(255) NOT NULL,
+                    user_id VARCHAR(255) NOT NULL,
+                    session_id VARCHAR(255) NOT NULL,
                     role VARCHAR(50) NOT NULL,
                     message TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
             
-            # Create index separately
+            # Create indexes
             cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_session_memory_uuid_created 
-                ON session_memory (uuid, created_at);
+                CREATE INDEX IF NOT EXISTS idx_session_memory_user_created 
+                ON session_memory (user_id, created_at);
+            """)
+            
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_memory_session 
+                ON session_memory (session_id, created_at);
             """)
             
             # Persistent memory table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS persistent_memory (
-                    uuid VARCHAR(255) PRIMARY KEY,
+                    user_id VARCHAR(255) PRIMARY KEY,
                     summary TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
