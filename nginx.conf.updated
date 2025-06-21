@@ -6,14 +6,14 @@ http {
     include       mime.types;
     default_type  application/octet-stream;
 
-    # Timeouts for long-running requests
+    # Add timeouts for long-running requests (like chat)
     proxy_read_timeout 300s;
     proxy_connect_timeout 75s;
 
     server {
         listen 8080;
-        
-        # Health check
+
+        # Health check endpoint
         location /health {
             return 200 "OK";
             add_header Content-Type text/plain;
@@ -25,10 +25,9 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header Authorization $http_authorization;
         }
 
-        # Storage service (memory, logging, sessions)
+        # Storage service - handles memory, logging, sessions
         location /api/storage/ {
             proxy_pass http://storage_service:8011/;
             proxy_set_header Host $host;
@@ -36,7 +35,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header Authorization $http_authorization;
         }
-
+        
         # Stats service
         location /api/stats/ {
             proxy_pass http://stats_service:8012/;
@@ -54,6 +53,8 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header Authorization $http_authorization;
+            
+            # Increase timeout for chat responses
             proxy_read_timeout 60s;
         }
 
@@ -65,8 +66,8 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header Authorization $http_authorization;
         }
-
-        # Vector service
+        
+        # Vector search service
         location /api/vector/ {
             rewrite ^/api/vector(/.*)$ $1 break;
             proxy_pass http://vector_service:8017/;
