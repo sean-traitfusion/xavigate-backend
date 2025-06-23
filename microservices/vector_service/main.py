@@ -16,7 +16,7 @@ load_dotenv(dotenv_path=service_env, override=True)
 
 # Determine environment
 ENV = os.getenv("ENV", "dev")
-root_path = "/api/vector" if ENV == "prod" else ""
+# root_path = "/api/vector" if ENV == "prod" else ""
 
 # Embedding and Chroma client imports
 from maintenance.embeddings import get_embedding

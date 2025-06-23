@@ -14,7 +14,7 @@ load_dotenv(dotenv_path=service_env, override=True)
 
 # Determine environment
 ENV = os.getenv("ENV", "dev")
-root_path = "/api/stats" if ENV == "prod" else ""
+# root_path = "/api/stats" if ENV == "prod" else ""
 
 app = FastAPI(
     title="Stats Service",
@@ -24,7 +24,7 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
     swagger_ui_parameters={"url": "openapi.json"},
-    root_path=root_path,
+    # root_path=root_path,
 )
 
 app.include_router(analytics_router, prefix="/stats")

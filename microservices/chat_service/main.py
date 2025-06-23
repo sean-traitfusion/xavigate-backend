@@ -43,7 +43,7 @@ service_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
 load_dotenv(dotenv_path=service_env, override=True)
 
 ENV = os.getenv("ENV", "dev")
-root_path = "/api/chat" if ENV == "prod" else ""
+# root_path = "/api/chat" if ENV == "prod" else ""
 
 # Load environment
 STORAGE_URL = os.getenv("STORAGE_URL", "http://localhost:8011")
@@ -65,7 +65,7 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
     swagger_ui_parameters={"url": "openapi.json"},
-    root_path=root_path,
+    # root_path=root_path,
 )
 
 app.add_middleware(
@@ -439,7 +439,7 @@ async def chat_endpoint(
             }
         }
         await client.post(
-            f"{STORAGE_URL}/api/memory/session-memory",
+            f"{STORAGE_URL}/memory/session-memory",
             json=save_payload,
             headers=internal_headers
         )

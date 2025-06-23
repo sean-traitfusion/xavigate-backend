@@ -20,7 +20,7 @@ load_dotenv(dotenv_path=service_env, override=True)
 
 # Determine environment
 ENV = os.getenv("ENV", "dev")
-root_path = "/api/storage" if ENV == "prod" else ""
+# root_path = "/api/storage" if ENV == "prod" else ""
 
 app = FastAPI(
     title="Storage Service",
@@ -29,8 +29,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    swagger_ui_parameters={"url": "openapi.json"},
-    root_path=root_path)
+    swagger_ui_parameters={"url": "openapi.json"}
+    # root_path=root_path
+)
 
 app.add_middleware(
     CORSMiddleware,
