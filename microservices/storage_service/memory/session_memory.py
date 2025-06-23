@@ -384,12 +384,11 @@ def store_session_snapshot_before_summarization(user_id: str, session_id: str, r
                             
                             cur.execute("""
                                 INSERT INTO interaction_logs 
-                                (user_id, session_id, interaction_id, created_at, user_message, assistant_response, 
+                                (uuid, interaction_id, created_at, user_message, assistant_response, 
                                  rag_context, strategy, model, tools_called)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """, (
-                                user_id,
-                                session_id,
+                                user_id,  # This goes into 'uuid' column which contains user_id values
                                 interaction_id,
                                 msg.get("created_at", snapshot_time),
                                 current_user_msg,
