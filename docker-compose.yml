@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   postgres:
@@ -5,11 +6,11 @@ services:
     container_name: xavigate_postgres
     restart: always
     environment:
-      POSTGRES_DB: xavigate
-      POSTGRES_USER: xavigate_user
-      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: ${POSTGRES_DB:-xavigate}
+      POSTGRES_USER: ${POSTGRES_USER:-xavigate_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_EXPOSE_PORT:-127.0.0.1:5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
@@ -19,12 +20,13 @@ services:
     build:
       context: ./microservices/vector_service
     container_name: xavigate_vector_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8017"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8017", "--root-path", "${API_ROOT_PATH:-}/api/vector"]
     ports:
-      - "8017:8017"
+      - "${BIND_HOST:-127.0.0.1}:8017:8017"
     env_file:
       - .env
-      - ./microservices/vector_service/.env
+    environment:
+      ENV: ${ENV:-dev}
     volumes:
       - ./microservices/vector_service/maintenance:/app/maintenance
       - ./microservices/vector_service/chroma_db:/app/chroma_db
@@ -32,6 +34,7 @@ services:
       - ./docs:/app/docs
     networks:
       - xavigate
+    restart: always
 
   storage_service:
     build:
@@ -39,52 +42,60 @@ services:
     container_name: xavigate_storage_service
     depends_on:
       - postgres
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011", "--root-path", "${API_ROOT_PATH:-}/api/storage"]
     ports:
-      - "8011:8011"
+      - "${BIND_HOST:-127.0.0.1}:8011:8011"
     env_file:
-      - ./.env
-      - ./microservices/storage_service/.env
+      - .env
     environment:
-      POSTGRES_DB: xavigate
-      POSTGRES_USER: xavigate_user
-      POSTGRES_PASSWORD: changeme
+      ENV: ${ENV:-dev}
+      POSTGRES_DB: ${POSTGRES_DB:-xavigate}
+      POSTGRES_USER: ${POSTGRES_USER:-xavigate_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      DATABASE_URL: postgresql://${POSTGRES_USER:-xavigate_user}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-xavigate}
     volumes:
       - ./microservices/storage_service:/app
       - ./microservices/shared:/app/shared
     networks:
       - xavigate
+    restart: always
 
   stats_service:
     build:
       context: ./microservices/stats_service
     container_name: xavigate_stats_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8012"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8012", "--root-path", "${API_ROOT_PATH:-}/api/stats"]
     ports:
-      - "8012:8012"
+      - "${BIND_HOST:-127.0.0.1}:8012:8012"
     env_file:
-      - ./microservices/stats_service/.env
+      - .env
+    environment:
+      ENV: ${ENV:-dev}
     volumes:
       - ./microservices/stats_service:/app
       - ./microservices/shared:/app/shared
     networks:
       - xavigate
+    restart: always
 
   auth_service:
     build:
       context: ./microservices/auth_service
     container_name: xavigate_auth_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8014"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8014", "--root-path", "${API_ROOT_PATH:-}/api/auth"]
     ports:
-      - "8014:8014"
+      - "${BIND_HOST:-127.0.0.1}:8014:8014"
     env_file:
-      - ./microservices/auth_service/.env
+      - .env
+    environment:
+      ENV: ${ENV:-dev}
     volumes:
       - ./microservices/auth_service:/app
     networks:
       - xavigate
+    restart: always
   
   chat_service:
     build:
@@ -94,39 +105,46 @@ services:
       - auth_service
       - storage_service
       - stats_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8015"]
+      - vector_service
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8015", "--root-path", "${API_ROOT_PATH:-}/api/chat"]
     ports:
-      - "8015:8015"
+      - "${BIND_HOST:-127.0.0.1}:8015:8015"
     env_file:
-      - ./microservices/chat_service/.env
+      - .env
     volumes:
       - ./microservices/chat_service:/app
       - ./microservices/shared:/app/shared
     environment:
+      ENV: ${ENV:-dev}
       VECTOR_URL: http://vector_service:8017
       STORAGE_URL: http://storage_service:8011
+      AUTH_SERVICE_URL: http://auth_service:8014
     networks:
       - xavigate
+    restart: always
+
   mntest_service:
     build:
       context: ./microservices/mntest_service
     container_name: xavigate_mntest_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8016"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8016", "--root-path", "${API_ROOT_PATH:-}/api/mntest"]
     ports:
-      - "8016:8016"
+      - "${BIND_HOST:-127.0.0.1}:8016:8016"
     env_file:
-      - ./microservices/mntest_service/.env
+      - .env
     volumes:
       - ./microservices/mntest_service:/app
       - ./microservices/shared:/app/shared
     environment:
-      POSTGRES_DB: xavigate
-      POSTGRES_USER: xavigate_user
-      POSTGRES_PASSWORD: changeme
+      ENV: ${ENV:-dev}
+      POSTGRES_DB: ${POSTGRES_DB:-xavigate}
+      POSTGRES_USER: ${POSTGRES_USER:-xavigate_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
     networks:
       - xavigate
+    restart: always
 
 volumes:
   pgdata:
