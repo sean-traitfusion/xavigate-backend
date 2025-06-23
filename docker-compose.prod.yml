@@ -42,7 +42,6 @@ services:
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8017", "--root-path", "/api/vector"]
     env_file:
       - .env
-      - ./microservices/vector_service/.env
     environment:
       ENV: prod
     volumes:
@@ -63,7 +62,6 @@ services:
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011", "--root-path", "/api/storage"]
     env_file:
       - ./.env
-      - ./microservices/storage_service/.env
     environment:
       ENV: prod
       POSTGRES_DB: ${POSTGRES_DB:-xavigate}
@@ -85,7 +83,6 @@ services:
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8012", "--root-path", "/api/stats"]
     env_file:
       - ./.env
-      - ./microservices/stats_service/.env
     environment:
       ENV: prod
     volumes:
@@ -102,7 +99,6 @@ services:
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8014", "--root-path", "/api/auth"]
     env_file:
       - ./.env
-      - ./microservices/auth_service/.env
     environment:
       ENV: prod
     volumes:
@@ -123,7 +119,6 @@ services:
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8015", "--root-path", "/api/chat"]
     env_file:
       - ./.env
-      - ./microservices/chat_service/.env
     volumes:
       - ./microservices/chat_service:/app
       - ./microservices/shared:/app/shared
@@ -143,7 +138,6 @@ services:
     entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8016", "--root-path", "/api/mntest"]
     env_file:
       - ./.env
-      - ./microservices/mntest_service/.env
     volumes:
       - ./microservices/mntest_service:/app
       - ./microservices/shared:/app/shared
