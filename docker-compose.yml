@@ -20,7 +20,7 @@ services:
     build:
       context: ./microservices/vector_service
     container_name: xavigate_vector_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8017", "--root-path", "${API_ROOT_PATH:-}/api/vector"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8017"]
     ports:
       - "${BIND_HOST:-127.0.0.1}:8017:8017"
     env_file:
@@ -42,7 +42,7 @@ services:
     container_name: xavigate_storage_service
     depends_on:
       - postgres
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011", "--root-path", "${API_ROOT_PATH:-}/api/storage"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011"]
     ports:
       - "${BIND_HOST:-127.0.0.1}:8011:8011"
     env_file:
@@ -66,7 +66,7 @@ services:
     build:
       context: ./microservices/stats_service
     container_name: xavigate_stats_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8012", "--root-path", "${API_ROOT_PATH:-}/api/stats"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8012"]
     ports:
       - "${BIND_HOST:-127.0.0.1}:8012:8012"
     env_file:
@@ -84,7 +84,7 @@ services:
     build:
       context: ./microservices/auth_service
     container_name: xavigate_auth_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8014", "--root-path", "${API_ROOT_PATH:-}/api/auth"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8014"]
     ports:
       - "${BIND_HOST:-127.0.0.1}:8014:8014"
     env_file:
@@ -106,7 +106,7 @@ services:
       - storage_service
       - stats_service
       - vector_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8015", "--root-path", "${API_ROOT_PATH:-}/api/chat"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8015"]
     ports:
       - "${BIND_HOST:-127.0.0.1}:8015:8015"
     env_file:
@@ -127,7 +127,7 @@ services:
     build:
       context: ./microservices/mntest_service
     container_name: xavigate_mntest_service
-    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8016", "--root-path", "${API_ROOT_PATH:-}/api/mntest"]
+    entrypoint: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8016"]
     ports:
       - "${BIND_HOST:-127.0.0.1}:8016:8016"
     env_file:
