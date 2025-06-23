@@ -152,7 +152,13 @@ def get_user_interactions(
         interactions = []
         for row in rows:
             row_dict = dict(zip(columns, row))
-            tools_data = json.loads(row_dict['tools_called']) if row_dict['tools_called'] else {}
+            # Handle tools_called safely
+            tools_data = {}
+            if row_dict['tools_called']:
+                try:
+                    tools_data = json.loads(row_dict['tools_called'])
+                except json.JSONDecodeError:
+                    tools_data = {"raw": row_dict['tools_called']}
             interactions.append({
                 "interaction_id": row_dict['interaction_id'],
                 "timestamp": row_dict['created_at'].isoformat(),
@@ -257,7 +263,13 @@ def get_all_interactions(
         interactions = []
         for row in rows:
             row_dict = dict(zip(columns, row))
-            tools_data = json.loads(row_dict['tools_called']) if row_dict['tools_called'] else {}
+            # Handle tools_called safely
+            tools_data = {}
+            if row_dict['tools_called']:
+                try:
+                    tools_data = json.loads(row_dict['tools_called'])
+                except json.JSONDecodeError:
+                    tools_data = {"raw": row_dict['tools_called']}
             interactions.append({
                 "user_id": row_dict['uuid'],
                 "interaction_id": row_dict['interaction_id'],
