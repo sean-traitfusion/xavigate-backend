@@ -18,7 +18,7 @@ AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://nginx:8080/api/auth")
 
 async def verify_key(token: str) -> bool:
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
             resp = await client.post(f"{AUTH_SERVICE_URL}/verify", json={"key": token})
             return resp.status_code == 200 and resp.json().get("valid", False)
     except Exception as e:
@@ -121,7 +121,7 @@ class ErrorResponse(BaseModel):
 # Endpoint to retrieve runtime configuration
 @app.get("/config")
 async def get_config():
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
         try:
             resp = await client.get(f"{STORAGE_URL}/api/memory/runtime-config")
             return resp.json()
@@ -152,7 +152,7 @@ async def chat_endpoint(
     chat_logger.start_request()
     request_start = datetime.utcnow()
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
         # 1. Retrieve session memory (conversation log)
         memory_start = datetime.utcnow()
         mem_resp = await client.get(

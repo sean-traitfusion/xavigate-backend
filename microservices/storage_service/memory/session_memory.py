@@ -385,8 +385,9 @@ def store_session_snapshot_before_summarization(user_id: str, session_id: str, r
                             cur.execute("""
                                 INSERT INTO interaction_logs 
                                 (uuid, interaction_id, created_at, user_message, assistant_response, 
-                                 rag_context, strategy, model, tools_called)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                 rag_context, strategy, model, tools_called,
+                                 user_id, session_id)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """, (
                                 user_id,  # This goes into 'uuid' column which contains user_id values
                                 interaction_id,
@@ -396,7 +397,9 @@ def store_session_snapshot_before_summarization(user_id: str, session_id: str, r
                                 f"Pre-summarization snapshot - {reason}",
                                 "historical_data",
                                 runtime_config.get("GPT_MODEL", "gpt-4"),
-                                "Historical snapshot - no tool data"
+                                "Historical snapshot - no tool data",
+                                user_id,  # for user_id column
+                                session_id  # for session_id column
                             ))
                             current_user_msg = None
                     
