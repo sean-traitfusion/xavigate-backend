@@ -222,21 +222,68 @@ def generate_compressed_summary(current_summary: str, compression_count: int = 0
             compression_ratio=int((1 - compression_ratio) * 100)
         )
         
+        # Estimate token count (rough approximation: 1 token ≈ 4 characters)
+        estimated_tokens = len(prompt) / 4
+        
+        # Choose appropriate model based on token count
+        if estimated_tokens > 6000:  # Leave buffer for response
+            # Use 16k model for large contexts
+            if "gpt-4" in model:
+                model = "gpt-4-1106-preview"  # GPT-4 Turbo with 128k context
+            else:
+                model = "gpt-3.5-turbo-16k"  # 16k context window
+            print(f"📝 Using large context model {model} for {estimated_tokens:.0f} estimated tokens")
+        
+        # If still too large, truncate the summary
+        max_chars = 50000  # Roughly 12.5k tokens, leaving room for prompt template
+        if len(current_summary) > max_chars:
+            print(f"⚠️ Truncating summary from {len(current_summary)} to {max_chars} chars")
+            current_summary = current_summary[:max_chars] + "\n\n[TRUNCATED DUE TO LENGTH]"
+            prompt = prompt_template.format(
+                current_summary=current_summary,
+                compression_ratio=int((1 - compression_ratio) * 100)
+            )
+        
         # Track timing
         start_time = datetime.now()
         
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "You are a helpful assistant that creates concise, comprehensive summaries while preserving ALL important information. Never lose personal details, names, dates, or specific facts."
-                },
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=2500  # Reasonable limit for compressed summaries
-        )
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": "You are a helpful assistant that creates concise, comprehensive summaries while preserving ALL important information. Never lose personal details, names, dates, or specific facts."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=temperature,
+                max_tokens=2500  # Reasonable limit for compressed summaries
+            )
+        except Exception as e:
+            print(f"❌ OpenAI API error: {str(e)}")
+            # If we still hit token limits, use a more aggressive truncation
+            if "context_length_exceeded" in str(e):
+                print(f"📝 Retrying with more aggressive truncation")
+                current_summary = current_summary[:20000] + "\n\n[HEAVILY TRUNCATED DUE TO LENGTH]"
+                prompt = prompt_template.format(
+                    current_summary=current_summary,
+                    compression_ratio=int((1 - compression_ratio) * 100)
+                )
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo-16k",
+                    messages=[
+                        {
+                            "role": "system", 
+                            "content": "You are a helpful assistant that creates concise, comprehensive summaries while preserving ALL important information. Never lose personal details, names, dates, or specific facts."
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=2500
+                )
+            else:
+                raise
         
         end_time = datetime.now()
         duration_ms = (end_time - start_time).total_seconds() * 1000

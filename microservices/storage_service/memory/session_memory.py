@@ -140,13 +140,15 @@ def log_summarization_event(user_id: str, session_id: str, event_type: str, deta
         with get_connection() as conn:
             with conn.cursor() as cur:
                 details_dict = details or {}
+                # CRITICAL: In this codebase, 'uuid' column actually stores user_id values!
+                # See debug_disaster.md for details on this confusion
                 cur.execute("""
                     INSERT INTO summarization_events 
                     (uuid, event_type, trigger_reason, conversation_length, 
-                     summary_length, summary_generated, chars_before, chars_after, details)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     summary_length, summary_generated, chars_before, chars_after, details, user_id, session_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
-                    user_id,  # uuid column stores user_id in this system
+                    user_id,  # uuid column MUST be user_id (see debug_disaster.md)
                     event_type,
                     details_dict.get('trigger_reason', event_type),
                     details_dict.get('conversation_length', 0),
@@ -154,7 +156,9 @@ def log_summarization_event(user_id: str, session_id: str, event_type: str, deta
                     details_dict.get('summary', ''),
                     details_dict.get('chars_before', 0),
                     details_dict.get('chars_after', 0),
-                    json.dumps(details_dict)
+                    json.dumps(details_dict),
+                    user_id,  # user_id column (redundant but needed if column exists)
+                    session_id  # session_id column
                 ))
                 conn.commit()
     

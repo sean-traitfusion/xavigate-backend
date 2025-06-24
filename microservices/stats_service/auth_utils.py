@@ -215,8 +215,11 @@ def clear_session_cookie(response: Response):
 
 def create_logout_url() -> str:
     """Create the Cognito logout URL."""
+    # Use encoded logout URI to ensure proper redirect
+    import urllib.parse
     logout_uri = f"{BASE_URL}/login"
-    return f"{LOGOUT_ENDPOINT}?client_id={CLIENT_ID}&logout_uri={logout_uri}"
+    encoded_uri = urllib.parse.quote(logout_uri, safe='')
+    return f"{LOGOUT_ENDPOINT}?client_id={CLIENT_ID}&logout_uri={encoded_uri}"
 
 # Storage for PKCE verifiers during auth flow
 pkce_storage: Dict[str, str] = {}
