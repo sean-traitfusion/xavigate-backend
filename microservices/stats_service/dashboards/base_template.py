@@ -442,7 +442,7 @@ def get_base_template(title: str, content: str, active_section: str = "config", 
                 
                 // Update form action if exists
                 const form = document.querySelector('form');
-                if (form && form.action.includes('/dashboard/')) {{
+                if (form && form.action && form.action.toString().includes('/dashboard/')) {{
                     form.action = baseUrl + '/';
                 }}
             }});

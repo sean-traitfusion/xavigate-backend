@@ -585,8 +585,11 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
             }};
             
             try {{
-                // Use the dashboard's save endpoint which handles auth internally
-                const response = await fetch('/dashboard/api/save-config', {{
+                // Determine the correct API endpoint based on environment
+                const isProduction = window.location.hostname !== 'localhost';
+                const apiUrl = isProduction ? '/system-admin/api/save-config' : '/dashboard/api/save-config';
+                
+                const response = await fetch(apiUrl, {{
                     method: 'POST',
                     headers: {{
                         'Content-Type': 'application/json'
@@ -619,8 +622,11 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
             }}
             
             try {{
-                // Call the reset endpoint
-                const response = await fetch('/dashboard/api/reset-defaults', {{
+                // Determine the correct API endpoint based on environment
+                const isProduction = window.location.hostname !== 'localhost';
+                const apiUrl = isProduction ? '/system-admin/api/reset-defaults' : '/dashboard/api/reset-defaults';
+                
+                const response = await fetch(apiUrl, {{
                     method: 'POST',
                     headers: {{
                         'Content-Type': 'application/json'
