@@ -539,14 +539,6 @@ def get_logging_dashboard_content() -> str:
                         const modalBody = document.getElementById('modal-body');
                         modalBody.innerHTML += `
                             <div class="detail-section">
-                                <p style="color: #666;">No prompt details found for this interaction.</p>
-                            </div>
-                        `;
-                    } else {
-                        console.log('No matching prompt found within time window');
-                        const modalBody = document.getElementById('modal-body');
-                        modalBody.innerHTML += `
-                            <div class="detail-section">
                                 <p style="color: #ff9800;">No prompt details found for this interaction. The prompt may not have been logged or the timing window exceeded.</p>
                                 <p>Debug info: Searched ${data.prompts.length} prompts within 60 second window.</p>
                             </div>
