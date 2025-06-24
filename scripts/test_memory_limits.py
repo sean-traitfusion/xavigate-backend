@@ -5,10 +5,21 @@ Test script to verify memory limits are enforced
 import requests
 import time
 import sys
+import os
 
 BASE_URL = "http://localhost:8011"
+AUTH_URL = "http://localhost:8014"
 TEST_USER = "test_memory_limit_user"
 TEST_SESSION = "test_memory_limit_session"
+
+# Get auth token from environment or generate one
+AUTH_TOKEN = os.getenv("AUTH_TOKEN", None)
+
+def get_auth_headers():
+    """Get authorization headers"""
+    if AUTH_TOKEN:
+        return {"Authorization": f"Bearer {AUTH_TOKEN}"}
+    return {}
 
 def test_memory_limits():
     """Test that memory limits are properly enforced"""
@@ -16,6 +27,12 @@ def test_memory_limits():
     print("🧪 Testing memory limit enforcement...")
     print(f"Test user: {TEST_USER}")
     print(f"Test session: {TEST_SESSION}\n")
+    
+    headers = get_auth_headers()
+    if not headers:
+        print("⚠️  No AUTH_TOKEN set. In production mode, set it with:")
+        print("   export AUTH_TOKEN='your-jwt-token-here'")
+        print("   Then run the script again.\n")
     
     # Create a large message (2K chars each)
     large_message = "This is a test message that simulates a long conversation. " * 35
@@ -28,10 +45,12 @@ def test_memory_limits():
         
         # Check current memory size
         try:
-            response = requests.get(f"{BASE_URL}/api/memory/session-memory", params={
-                "user_id": TEST_USER,
-                "session_id": TEST_SESSION
-            })
+            response = requests.get(f"{BASE_URL}/api/memory/session-memory", 
+                params={
+                    "user_id": TEST_USER,
+                    "session_id": TEST_SESSION
+                },
+                headers=headers)
             
             if response.status_code == 200:
                 current_memory = response.json()
@@ -43,14 +62,16 @@ def test_memory_limits():
         
         # Add new interaction
         print(f"➕ Adding message {i+1}...")
-        response = requests.post(f"{BASE_URL}/api/memory/session-memory", json={
-            "user_id": TEST_USER,
-            "session_id": TEST_SESSION,
-            "exchanges": [{
-                "user_prompt": f"Test question {i+1}: {large_message}",
-                "assistant_response": f"Test response {i+1}: {large_message}"
-            }]
-        })
+        response = requests.post(f"{BASE_URL}/api/memory/session-memory", 
+            json={
+                "user_id": TEST_USER,
+                "session_id": TEST_SESSION,
+                "exchanges": [{
+                    "user_prompt": f"Test question {i+1}: {large_message}",
+                    "assistant_response": f"Test response {i+1}: {large_message}"
+                }]
+            },
+            headers=headers)
         
         if response.status_code == 200:
             print("✅ Message added successfully")
@@ -63,10 +84,12 @@ def test_memory_limits():
         
         # Check if summarization happened
         try:
-            response = requests.get(f"{BASE_URL}/api/memory/session-memory", params={
-                "user_id": TEST_USER,
-                "session_id": TEST_SESSION
-            })
+            response = requests.get(f"{BASE_URL}/api/memory/session-memory", 
+                params={
+                    "user_id": TEST_USER,
+                    "session_id": TEST_SESSION
+                },
+                headers=headers)
             
             if response.status_code == 200:
                 new_memory = response.json()
@@ -81,10 +104,12 @@ def test_memory_limits():
     
     # Final check
     print("\n📊 Final memory check:")
-    response = requests.get(f"{BASE_URL}/api/memory/session-memory", params={
-        "user_id": TEST_USER,
-        "session_id": TEST_SESSION
-    })
+    response = requests.get(f"{BASE_URL}/api/memory/session-memory", 
+        params={
+            "user_id": TEST_USER,
+            "session_id": TEST_SESSION
+        },
+        headers=headers)
     
     if response.status_code == 200:
         final_memory = response.json()
@@ -104,9 +129,10 @@ def test_memory_limits():
 def cleanup_test_session():
     """Clean up test session"""
     print("\n🧹 Cleaning up test session...")
-    response = requests.post(f"{BASE_URL}/api/memory/expire", json={
-        "uuid": TEST_USER
-    })
+    headers = get_auth_headers()
+    response = requests.post(f"{BASE_URL}/api/memory/expire", 
+        json={"uuid": TEST_USER},
+        headers=headers)
     print(f"Cleanup response: {response.status_code}")
 
 if __name__ == "__main__":
