@@ -3,7 +3,7 @@
 Enhanced memory routes with auto-summarization and compression
 Compatible with existing endpoints while adding new capabilities
 """
-from fastapi import APIRouter, HTTPException, Header, Response, Body, Depends
+from fastapi import APIRouter, HTTPException, Header, Response, Body, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -353,7 +353,7 @@ def get_runtime_config():
     return config_dict
 
 @router.post("/runtime-config")
-def update_runtime_config(cfg: Dict[str, Any]):
+def update_runtime_config(cfg: Dict[str, Any], request: Request = None):
     """Update runtime configuration - accepts any configuration fields"""
     # Update all provided configuration values
     for key, value in cfg.items():
@@ -377,6 +377,17 @@ def update_runtime_config(cfg: Dict[str, Any]):
     for lower_key, upper_key in key_mappings.items():
         if lower_key in cfg and cfg[lower_key] is not None:
             runtime_config.set_config(upper_key, cfg[lower_key])
+    
+    # Save to database for persistence
+    try:
+        from config.config_persistence import save_config_to_db
+        # Try to get user info from request if available
+        user_id = None
+        if request and hasattr(request, 'state') and hasattr(request.state, 'user'):
+            user_id = request.state.user.get('email', 'unknown')
+        save_config_to_db(user_id)
+    except Exception as e:
+        print(f"Warning: Could not persist config to database: {e}")
     
     return {"status": "ok"}
 
@@ -433,3 +444,79 @@ def optimize_prompt(request: Dict[str, Any]):
         "final_prompt": final_prompt,
         "metrics": metrics
     }
+
+# Configuration backup endpoints
+@router.post("/config-backup")
+def create_config_backup(request: Dict[str, Any]):
+    """Create a backup of the current configuration"""
+    try:
+        from config.config_persistence import create_config_backup
+        
+        backup_name = request.get("backup_name", f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        description = request.get("description", "Manual backup")
+        user_id = request.get("user_id", "unknown")
+        
+        create_config_backup(backup_name, description, user_id)
+        
+        return {
+            "status": "ok",
+            "backup_name": backup_name,
+            "message": "Configuration backup created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/config-backups")
+def list_config_backups():
+    """List all available configuration backups"""
+    try:
+        from config.config_persistence import list_config_backups
+        
+        backups = list_config_backups()
+        return {
+            "status": "ok",
+            "backups": backups
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/config-restore")
+def restore_config_backup(request: Dict[str, Any]):
+    """Restore configuration from a backup"""
+    try:
+        from config.config_persistence import restore_config_backup
+        
+        backup_name = request.get("backup_name")
+        if not backup_name:
+            raise ValueError("backup_name is required")
+        
+        user_id = request.get("user_id", "unknown")
+        
+        restore_config_backup(backup_name, user_id)
+        
+        return {
+            "status": "ok",
+            "message": f"Configuration restored from backup '{backup_name}'"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/config-reset-defaults")
+def reset_to_defaults(request: Dict[str, Any] = None):
+    """Reset configuration to original system defaults"""
+    try:
+        from config.config_persistence import restore_config_backup
+        
+        user_id = request.get("user_id", "unknown") if request else "unknown"
+        
+        # Restore from the original defaults backup
+        restore_config_backup("original_defaults", user_id)
+        
+        return {
+            "status": "ok",
+            "message": "Configuration reset to system defaults"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

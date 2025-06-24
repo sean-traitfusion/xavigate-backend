@@ -1,5 +1,26 @@
-def get_base_template(title: str, content: str, active_section: str = "config") -> str:
+def get_base_template(title: str, content: str, active_section: str = "config", user_info: dict = None) -> str:
     """Generate the base dashboard template with sidebar navigation."""
+    # Show user info and logout button if authenticated
+    user_section = ""
+    if user_info:
+        user_email = user_info.get('email', 'User')
+        user_section = f"""
+            <div class="user-section">
+                <div class="user-info">
+                    <svg class="user-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="user-email">{user_email}</span>
+                </div>
+                <a href="#" class="logout-link" data-route="/logout">
+                    <svg class="logout-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/>
+                    </svg>
+                    Logout
+                </a>
+            </div>
+        """
+    
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -294,6 +315,59 @@ def get_base_template(title: str, content: str, active_section: str = "config") 
                 color: #742a2a;
                 border: 1px solid #fc8181;
             }}
+            
+            /* User section styles */
+            .user-section {{
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                padding: 1.5rem;
+                background: rgba(0, 0, 0, 0.2);
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+            }}
+            
+            .user-info {{
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                margin-bottom: 1rem;
+                color: rgba(255, 255, 255, 0.9);
+            }}
+            
+            .user-icon {{
+                width: 24px;
+                height: 24px;
+                opacity: 0.8;
+            }}
+            
+            .user-email {{
+                font-size: 0.875rem;
+                font-weight: 500;
+            }}
+            
+            .logout-link {{
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                color: rgba(255, 255, 255, 0.8);
+                text-decoration: none;
+                font-size: 0.875rem;
+                padding: 0.5rem 1rem;
+                margin: 0 -1rem;
+                border-radius: 6px;
+                transition: all 0.2s;
+            }}
+            
+            .logout-link:hover {{
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+            }}
+            
+            .logout-icon {{
+                width: 18px;
+                height: 18px;
+            }}
         </style>
     </head>
     <body>
@@ -338,6 +412,7 @@ def get_base_template(title: str, content: str, active_section: str = "config") 
                     </a>
                 </div>
             </nav>
+            {user_section}
         </aside>
         
         <main class="main-content">
@@ -356,6 +431,14 @@ def get_base_template(title: str, content: str, active_section: str = "config") 
                     const fullPath = baseUrl + route;
                     link.href = fullPath;
                 }});
+                
+                // Update logout link
+                const logoutLink = document.querySelector('.logout-link');
+                if (logoutLink) {{
+                    const route = logoutLink.getAttribute('data-route');
+                    const fullPath = baseUrl + route;
+                    logoutLink.href = fullPath;
+                }}
                 
                 // Update form action if exists
                 const form = document.querySelector('form');

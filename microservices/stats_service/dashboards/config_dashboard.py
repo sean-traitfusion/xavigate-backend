@@ -612,7 +612,45 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
             }}
         }}
         
-        // Override form submission for save buttons
+        // Add reset functionality
+        async function resetConfigToDefaults() {{
+            if (!confirm('Are you sure you want to reset all settings to system defaults? This cannot be undone.')) {{
+                return;
+            }}
+            
+            try {{
+                // Call the reset endpoint
+                const response = await fetch('/dashboard/api/reset-defaults', {{
+                    method: 'POST',
+                    headers: {{
+                        'Content-Type': 'application/json'
+                    }},
+                    body: JSON.stringify({{}})
+                }});
+                
+                if (response.ok) {{
+                    // Show success message
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'status-message success';
+                    statusDiv.textContent = '✅ Configuration reset to defaults successfully!';
+                    statusDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 1rem 2rem; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 8px; z-index: 1000;';
+                    document.body.appendChild(statusDiv);
+                    
+                    setTimeout(() => {{
+                        statusDiv.remove();
+                        // Reload the page to show new values
+                        window.location.reload();
+                    }}, 2000);
+                }} else {{
+                    const error = await response.text();
+                    alert(`Reset failed: ${{error}}`);
+                }}
+            }} catch (error) {{
+                alert(`Reset failed: ${{error}}`);
+            }}
+        }}
+        
+        // Override form submission for save and reset buttons
         document.addEventListener('DOMContentLoaded', function() {{
             // Find all save buttons and override their behavior
             document.querySelectorAll('button[value="save"]').forEach(button => {{
@@ -620,6 +658,15 @@ def get_config_dashboard_content(config: Dict[str, Any], status_message: str = N
                 button.onclick = function(e) {{
                     e.preventDefault();
                     saveConfigViaAjax();
+                }};
+            }});
+            
+            // Find all reset buttons and override their behavior
+            document.querySelectorAll('button[value="reset"]').forEach(button => {{
+                button.type = 'button'; // Prevent form submission
+                button.onclick = function(e) {{
+                    e.preventDefault();
+                    resetConfigToDefaults();
                 }};
             }});
         }});
