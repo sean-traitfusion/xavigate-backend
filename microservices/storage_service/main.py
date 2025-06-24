@@ -53,6 +53,16 @@ app.include_router(logging_router, prefix="/api/logging")
 # Admin dashboard - temporarily disabled
 # app.include_router(admin_router)
 
+@app.on_event("startup")
+async def startup_event():
+    """Load configuration from database on startup."""
+    try:
+        from config.config_persistence import load_config_from_db
+        load_config_from_db()
+        print("✅ Loaded configuration from database on startup")
+    except Exception as e:
+        print(f"⚠️ Could not load persisted config on startup: {e}")
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "storgage"}
+    return {"status": "ok", "service": "storage"}
