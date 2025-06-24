@@ -60,6 +60,11 @@ def get_connection():
         try:
             yield conn
         finally:
+            # Ensure connection is clean before returning to pool
+            try:
+                conn.rollback()  # Clear any uncommitted transaction
+            except:
+                pass  # Ignore errors during cleanup
             _connection_pool.putconn(conn)
 
 def execute_db_operation(operation: Callable, *args, **kwargs) -> Any:
