@@ -467,7 +467,7 @@ def get_logging_dashboard_content() -> str:
                         </div>
                     ` : ''}
                     
-                    <div style="margin-top: 2rem;">
+                    <div style="margin-top: 2rem;" id="prompt-details-container">
                         <button class="primary" onclick="loadPromptDetails('${log.user_id}', '${log.timestamp}')">
                             View Full Prompt Details
                         </button>
@@ -478,6 +478,10 @@ def get_logging_dashboard_content() -> str:
             }
             
             async function loadPromptDetails(userId, timestamp) {
+                // Replace button with loading message
+                const container = document.getElementById('prompt-details-container');
+                container.innerHTML = '<p>Loading prompt details...</p>';
+                
                 try {
                     console.log(`Loading prompt details for user: ${userId}, timestamp: ${timestamp}`);
                     const response = await fetch(baseUrl + '/logging/prompts/' + userId + '?limit=20');
@@ -508,8 +512,7 @@ def get_logging_dashboard_content() -> str:
                     
                     if (closestPrompt) {
                         console.log(`Found matching prompt with diff: ${closestDiff}ms`);
-                        const modalBody = document.getElementById('modal-body');
-                        modalBody.innerHTML += `
+                        container.innerHTML = `
                             <div class="detail-section">
                                 <h3>System Prompt</h3>
                                 <div class="code-block">${escapeHtml(closestPrompt.system_prompt)}</div>
@@ -536,8 +539,7 @@ def get_logging_dashboard_content() -> str:
                         `;
                     } else {
                         console.log('No matching prompt found within time window');
-                        const modalBody = document.getElementById('modal-body');
-                        modalBody.innerHTML += `
+                        container.innerHTML = `
                             <div class="detail-section">
                                 <p style="color: #ff9800;">No prompt details found for this interaction. The prompt may not have been logged or the timing window exceeded.</p>
                                 <p>Debug info: Searched ${data.prompts.length} prompts within 60 second window.</p>
@@ -546,8 +548,7 @@ def get_logging_dashboard_content() -> str:
                     }
                 } catch (error) {
                     console.error('Failed to load prompt details:', error);
-                    const modalBody = document.getElementById('modal-body');
-                    modalBody.innerHTML += `
+                    container.innerHTML = `
                         <div class="detail-section">
                             <p style="color: #c62828;">Error loading prompt details: ${error.message}</p>
                         </div>
