@@ -441,7 +441,8 @@ async def chat_endpoint(
         await client.post(
             f"{STORAGE_URL}/api/memory/session-memory",
             json=save_payload,
-            headers=internal_headers
+            headers=internal_headers,
+            timeout=60.0  # Increased timeout for large memory saves
         )
 
         # 7. Build response sources from vector chunks (use filtered chunks)

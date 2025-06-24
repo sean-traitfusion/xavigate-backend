@@ -388,6 +388,7 @@ def store_session_snapshot_before_summarization(user_id: str, session_id: str, r
                                  rag_context, strategy, model, tools_called,
                                  user_id, session_id)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ON CONFLICT (interaction_id) DO NOTHING
                             """, (
                                 user_id,  # This goes into 'uuid' column which contains user_id values
                                 interaction_id,
