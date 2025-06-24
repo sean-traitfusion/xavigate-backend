@@ -425,12 +425,13 @@ def _track_compression_event(user_id: str, original_size: int, compressed_size: 
             with conn.cursor() as cur:
                 # Insert compression event
                 compression_ratio = compressed_size / original_size if original_size > 0 else 1
+                # CRITICAL: 'uuid' column stores user_id in this codebase!
                 cur.execute("""
                     INSERT INTO compression_events 
-                    (user_id, original_size, compressed_size, compression_ratio, compression_count, model_used)
+                    (uuid, original_size, compressed_size, compression_ratio, compression_count, model_used)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """, (
-                    user_id,
+                    user_id,  # Goes into 'uuid' column per debug_disaster.md
                     original_size,
                     compressed_size,
                     compression_ratio,
