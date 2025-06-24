@@ -142,15 +142,15 @@ def log_summarization_event(user_id: str, session_id: str, event_type: str, deta
                 details_dict = details or {}
                 cur.execute("""
                     INSERT INTO summarization_events 
-                    (user_id, session_id, event_type, trigger_reason, conversation_length, 
-                     summary_generated, chars_before, chars_after, details)
+                    (uuid, event_type, trigger_reason, conversation_length, 
+                     summary_length, summary_generated, chars_before, chars_after, details)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
-                    user_id,
-                    session_id,
+                    user_id,  # uuid column stores user_id in this system
                     event_type,
                     details_dict.get('trigger_reason', event_type),
                     details_dict.get('conversation_length', 0),
+                    len(details_dict.get('summary', '')),  # summary_length
                     details_dict.get('summary', ''),
                     details_dict.get('chars_before', 0),
                     details_dict.get('chars_after', 0),
