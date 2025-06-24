@@ -55,13 +55,21 @@ app.include_router(logging_router, prefix="/api/logging")
 
 @app.on_event("startup")
 async def startup_event():
-    """Load configuration from database on startup."""
+    """Initialize database and load configuration on startup."""
+    # Initialize memory tables first
+    from memory.db import initialize_memory_tables
+    initialize_memory_tables()
+    
+    # Load configuration from database
     try:
-        from config.config_persistence import load_config_from_db
+        from config.config_persistence import load_config_from_db, init_config_tables
+        init_config_tables()  # Ensure config tables exist
         load_config_from_db()
-        print("✅ Loaded configuration from database on startup")
+        print("✅ Loaded configuration from database on startup", flush=True)
     except Exception as e:
-        print(f"⚠️ Could not load persisted config on startup: {e}")
+        print(f"⚠️ Could not load persisted config on startup: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
 
 @app.get("/health")
 def health():
