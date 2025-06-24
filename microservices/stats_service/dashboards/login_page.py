@@ -191,7 +191,9 @@ def get_login_page_content(error_message: str = None) -> str:
             function handleLogin() {{
                 document.getElementById('loading').classList.add('show');
                 // Redirect to the auth endpoint which will handle the Cognito flow
-                window.location.href = '{"/system-admin/auth/login" if error_message and "production" in error_message else "/dashboard/auth/login"}';
+                const isProduction = window.location.hostname !== 'localhost';
+                const authUrl = isProduction ? '/system-admin/auth/login' : '/dashboard/auth/login';
+                window.location.href = authUrl;
             }}
             
             // Check if we're coming back from a failed auth

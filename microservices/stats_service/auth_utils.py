@@ -51,6 +51,7 @@ def generate_session_id() -> str:
 
 def create_auth_url(state: str, code_challenge: str) -> str:
     """Create the Cognito authorization URL."""
+    import urllib.parse
     params = {
         "response_type": "code",
         "client_id": CLIENT_ID,
@@ -58,10 +59,15 @@ def create_auth_url(state: str, code_challenge: str) -> str:
         "scope": "email openid phone",
         "state": state,
         "code_challenge": code_challenge,
-        "code_challenge_method": "S256"
+        "code_challenge_method": "S256",
+        "prompt": "login"  # Force fresh login to avoid main app session conflicts
     }
-    query_string = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"{AUTHORIZE_ENDPOINT}?{query_string}"
+    # URL encode the parameters properly
+    query_string = urllib.parse.urlencode(params)
+    auth_url = f"{AUTHORIZE_ENDPOINT}?{query_string}"
+    print(f"Auth URL: {auth_url}")  # Debug logging
+    print(f"Redirect URI: {REDIRECT_URI}")  # Debug logging
+    return auth_url
 
 async def exchange_code_for_tokens(code: str, code_verifier: str) -> Dict[str, Any]:
     """Exchange authorization code for tokens."""
