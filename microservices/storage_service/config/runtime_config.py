@@ -251,3 +251,11 @@ def reset_to_defaults() -> None:
 # Force initialization on import
 _config_store = {}
 _load_from_env()
+
+# Load persisted config if available
+try:
+    from config.config_persistence import load_config_from_db
+    load_config_from_db()
+    print("✅ Loaded configuration from database")
+except Exception as e:
+    print(f"⚠️ Could not load persisted config: {e}")

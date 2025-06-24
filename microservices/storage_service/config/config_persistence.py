@@ -11,12 +11,13 @@ from psycopg2.extras import Json
 from config.runtime_config import DEFAULT_CONFIG, get, set_config, all_config
 
 # Database connection parameters
+# Use same defaults as main storage service
 DB_PARAMS = {
-    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "host": os.getenv("POSTGRES_HOST", "postgres"),  # Docker service name
     "port": os.getenv("POSTGRES_PORT", "5432"),
-    "database": os.getenv("POSTGRES_DATABASE", "xavigate"),
-    "user": os.getenv("POSTGRES_USER", "postgres"),
-    "password": os.getenv("POSTGRES_PASSWORD", "postgres")
+    "database": os.getenv("POSTGRES_DB", "xavigate"),
+    "user": os.getenv("POSTGRES_USER", "xavigate_user"),
+    "password": os.getenv("POSTGRES_PASSWORD", "changeme")
 }
 
 def get_db_connection():
