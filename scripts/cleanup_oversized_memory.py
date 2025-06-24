@@ -12,13 +12,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def get_db_connection():
     """Get database connection"""
-    # For production, connect to the Docker container
+    # Connect to the Docker container
     return psycopg2.connect(
         host="127.0.0.1",  # Docker binds to localhost
         port="5432",
         database="xavigate",
-        user="postgres",
-        password="changeme"  # Production password
+        user="xavigate_user",  # From docker-compose.yml
+        password="changeme"  # From docker-compose.yml
     )
 
 def cleanup_oversized_sessions():
