@@ -45,11 +45,7 @@ def test_memory_limits():
         
         # Check current memory size
         try:
-            response = requests.get(f"{BASE_URL}/api/memory/session-memory", 
-                params={
-                    "user_id": TEST_USER,
-                    "session_id": TEST_SESSION
-                },
+            response = requests.get(f"{BASE_URL}/api/memory/session-memory/{TEST_SESSION}", 
                 headers=headers)
             
             if response.status_code == 200:
@@ -64,12 +60,15 @@ def test_memory_limits():
         print(f"➕ Adding message {i+1}...")
         response = requests.post(f"{BASE_URL}/api/memory/session-memory", 
             json={
-                "user_id": TEST_USER,
-                "session_id": TEST_SESSION,
-                "exchanges": [{
-                    "user_prompt": f"Test question {i+1}: {large_message}",
-                    "assistant_response": f"Test response {i+1}: {large_message}"
-                }]
+                "uuid": TEST_SESSION,  # This is what the API expects
+                "conversation_log": {
+                    "user_id": TEST_USER,
+                    "session_id": TEST_SESSION,
+                    "exchanges": [{
+                        "user_prompt": f"Test question {i+1}: {large_message}",
+                        "assistant_response": f"Test response {i+1}: {large_message}"
+                    }]
+                }
             },
             headers=headers)
         
@@ -84,11 +83,7 @@ def test_memory_limits():
         
         # Check if summarization happened
         try:
-            response = requests.get(f"{BASE_URL}/api/memory/session-memory", 
-                params={
-                    "user_id": TEST_USER,
-                    "session_id": TEST_SESSION
-                },
+            response = requests.get(f"{BASE_URL}/api/memory/session-memory/{TEST_SESSION}", 
                 headers=headers)
             
             if response.status_code == 200:
@@ -104,11 +99,7 @@ def test_memory_limits():
     
     # Final check
     print("\n📊 Final memory check:")
-    response = requests.get(f"{BASE_URL}/api/memory/session-memory", 
-        params={
-            "user_id": TEST_USER,
-            "session_id": TEST_SESSION
-        },
+    response = requests.get(f"{BASE_URL}/api/memory/session-memory/{TEST_SESSION}", 
         headers=headers)
     
     if response.status_code == 200:
