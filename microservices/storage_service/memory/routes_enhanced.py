@@ -15,7 +15,7 @@ import requests
 from memory.models import RuntimeConfig
 from memory.client import MemoryClient
 from memory.prompt_manager import optimize_prompt_size, log_prompt_metrics
-from memory.db import initialize_memory_tables
+from memory.db import initialize_memory_tables, get_connection
 from config import runtime_config
 
 from dotenv import load_dotenv

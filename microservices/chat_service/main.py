@@ -140,8 +140,8 @@ async def chat_endpoint(
     _=Depends(require_jwt),
 ):
     # Stub response in dev mode to avoid real OpenAI calls
-    if os.getenv("ENV", "dev") == "dev":
-        return ChatResponse(answer="Dev stub response", sources=[], plan={}, critique="", followup="")
+    # if os.getenv("ENV", "dev") == "dev":
+    #     return ChatResponse(answer="Dev stub response", sources=[], plan={}, critique="", followup="")
     # Extract token for downstream calls (empty in dev)
     token = authorization.split(" ", 1)[1] if authorization else ""
 
@@ -439,7 +439,7 @@ async def chat_endpoint(
             }
         }
         await client.post(
-            f"{STORAGE_URL}/memory/session-memory",
+            f"{STORAGE_URL}/api/memory/session-memory",
             json=save_payload,
             headers=internal_headers
         )

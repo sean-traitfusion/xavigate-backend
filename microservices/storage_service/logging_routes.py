@@ -49,8 +49,9 @@ def save_interaction_log(log: InteractionLog):
         query = """
             INSERT INTO interaction_logs (
                 uuid, interaction_id, created_at, user_message, 
-                assistant_response, rag_context, strategy, model, tools_called
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                assistant_response, rag_context, strategy, model, tools_called,
+                user_id, session_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (interaction_id) DO NOTHING
         """
         
@@ -63,7 +64,9 @@ def save_interaction_log(log: InteractionLog):
             log.rag_context,
             log.strategy,
             log.model,
-            log.tools_called
+            log.tools_called,
+            log.user_id,
+            log.session_id
         )
         
         with get_connection() as conn:
