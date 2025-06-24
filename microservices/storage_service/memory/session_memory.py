@@ -32,10 +32,28 @@ def log_interaction(user_id: str, session_id: str, role: str, message: str):
     """
     Log a user or assistant interaction with automatic memory management
     """
-    # Log the new interaction
+    # CRITICAL: Check memory size BEFORE adding new content
+    current_size = get_session_memory_size(session_id)
+    new_message_size = len(role) + len(message) + 4
+    limit = get_session_memory_limit()
+    
+    # If adding this message would exceed 70% of limit, summarize FIRST
+    if runtime_config.get("AUTO_SUMMARY_ENABLED", True):
+        if (current_size + new_message_size) >= (limit * 0.7):
+            print(f"⚠️ Session memory would exceed 70% limit with new message ({current_size + new_message_size}/{limit} chars). Summarizing BEFORE adding...")
+            summarize_and_archive_session(user_id, session_id, "pre_limit")
+            
+            # Check if summarization worked
+            new_size = get_session_memory_size(session_id)
+            if new_size > (limit * 0.5):
+                # If still too big after summarization, force clear
+                print(f"🚨 Session memory still too large after summarization ({new_size} chars), forcing clear")
+                clear_session_memory(session_id)
+    
+    # Now safe to log the new interaction
     result = execute_db_operation(_log_interaction_impl, user_id, session_id, role, message)
     
-    # Check if we need to summarize and clean up
+    # Double-check after adding (safety net)
     if runtime_config.get("AUTO_SUMMARY_ENABLED", True):
         check_and_manage_memory(user_id, session_id)
     
@@ -110,10 +128,17 @@ def check_and_manage_memory(user_id: str, session_id: str):
     memory_size = get_session_memory_size(session_id)
     limit = get_session_memory_limit()
     
-    # If we're approaching the limit (90% of max), trigger summarization
-    if memory_size >= (limit * 0.9):
+    # Lower threshold to 80% to ensure we never get close to 20k
+    if memory_size >= (limit * 0.8):
         print(f"📝 Session memory for user {user_id} session {session_id} approaching limit ({memory_size}/{limit} chars). Triggering summarization...")
-        summarize_and_archive_session(user_id, session_id, "auto_limit")
+        result = summarize_and_archive_session(user_id, session_id, "auto_limit")
+        
+        # If summarization failed and memory is still large, force clear it
+        if not result:
+            final_size = get_session_memory_size(session_id)
+            if final_size >= limit:
+                print(f"🚨 EMERGENCY: Force clearing session memory that failed to summarize ({final_size} chars)")
+                clear_session_memory(session_id)
 
 def log_summarization_event(user_id: str, session_id: str, event_type: str, details: Optional[dict] = None):
     """Log summarization events for dashboard visibility - now to both file AND database"""
@@ -238,6 +263,41 @@ def summarize_and_archive_session(user_id: str, session_id: str, reason: str = "
             return True
         else:
             print(f"⚠️ Failed to generate summary for user {user_id} session {session_id}")
+            
+            # CRITICAL FIX: Store raw conversation as fallback when summarization fails
+            if chars_before > get_session_memory_limit() * 2:
+                print(f"🚨 Session memory critically oversized ({chars_before} chars), storing raw conversation as fallback")
+                
+                # Store the raw conversation in persistent memory as a fallback
+                from .persistent_memory import append_to_summary
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                
+                # Truncate if necessary to prevent persistent memory overflow
+                max_raw_size = 10000  # Store up to 10k chars of raw conversation
+                if chars_before > max_raw_size:
+                    truncated_conversation = conversation_text[-max_raw_size:]
+                    fallback_summary = f"[{timestamp}] [AUTOSUMMARY FAILED - RAW CONVERSATION TRUNCATED]: ...{truncated_conversation}"
+                else:
+                    fallback_summary = f"[{timestamp}] [AUTOSUMMARY FAILED - RAW CONVERSATION]: {conversation_text}"
+                
+                append_to_summary(user_id, fallback_summary)
+                
+                # Log the event
+                log_summarization_event(user_id, session_id, f"{reason}_failed_cleared", {
+                    "conversation_length": chars_before,
+                    "summary_length": len(fallback_summary),
+                    "summary": "FAILED - Raw conversation stored as fallback",
+                    "chars_before": chars_before,
+                    "chars_after": 0,
+                    "interactions_preserved": interactions_stored,
+                    "error": "Summarization failed - stored raw conversation",
+                    "trigger_reason": reason
+                })
+                
+                # Now clear session memory
+                clear_session_memory(session_id)
+                print(f"🧹 Cleared oversized session memory after storing fallback for user {user_id} session {session_id}")
+            
             return False
             
     except Exception as e:
@@ -253,6 +313,7 @@ def generate_conversation_summary(conversation_text: str) -> Optional[str]:
     try:
         from openai import OpenAI
         import os
+        import time
         
         # Initialize OpenAI client
         api_key = os.getenv("OPENAI_API_KEY")
@@ -269,18 +330,72 @@ def generate_conversation_summary(conversation_text: str) -> Optional[str]:
         # Format the prompt
         prompt = get_summary_prompt().format(conversation_text=conversation_text)
         
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that creates concise, comprehensive conversation summaries."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=1000
-        )
+        # Implement retry logic with exponential backoff for rate limits
+        max_retries = 3
+        retry_delay = 1
         
-        summary = response.choices[0].message.content.strip()
-        return summary
+        for attempt in range(max_retries):
+            try:
+                # Keep conversation size reasonable for summarization
+                conversation_to_summarize = conversation_text
+                if len(conversation_text) > 20000:
+                    # Take only the most recent 20k chars to ensure we never exceed context
+                    conversation_to_summarize = conversation_text[-20000:]
+                    print(f"📊 Truncating conversation from {len(conversation_text)} to 20k chars for summarization")
+                
+                # Use the truncated conversation in the prompt
+                safe_prompt = get_summary_prompt().format(conversation_text=conversation_to_summarize)
+                
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that creates concise, comprehensive conversation summaries."},
+                        {"role": "user", "content": safe_prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=800  # Slightly reduced to ensure we stay within limits
+                )
+                
+                summary = response.choices[0].message.content.strip()
+                return summary
+                
+            except Exception as api_error:
+                error_str = str(api_error)
+                
+                # Handle rate limits
+                if "rate_limit_exceeded" in error_str:
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)
+                        print(f"⏳ Rate limit hit, waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        print(f"❌ Rate limit exceeded after {max_retries} attempts")
+                        
+                # Handle context length errors
+                elif "context_length_exceeded" in error_str:
+                    print(f"❌ Context too long for {model}, truncating conversation")
+                    # Truncate to last 20k chars and retry
+                    truncated_text = conversation_text[-20000:]
+                    truncated_prompt = get_summary_prompt().format(conversation_text=truncated_text)
+                    try:
+                        response = client.chat.completions.create(
+                            model="gpt-3.5-turbo-16k",
+                            messages=[
+                                {"role": "system", "content": "You are a helpful assistant that creates concise summaries."},
+                                {"role": "user", "content": truncated_prompt}
+                            ],
+                            temperature=temperature,
+                            max_tokens=500
+                        )
+                        return "[TRUNCATED] " + response.choices[0].message.content.strip()
+                    except:
+                        return None
+                else:
+                    print(f"❌ API error: {api_error}")
+                    return None
+        
+        return None
         
     except Exception as e:
         print(f"❌ Error generating summary: {e}")
@@ -384,7 +499,8 @@ def store_session_snapshot_before_summarization(user_id: str, session_id: str, r
                             current_user_msg = msg["message"]
                         elif msg["role"] == "assistant" and current_user_msg:
                             interaction_count += 1
-                            interaction_id = f"{user_id}_{session_id}_snapshot_{snapshot_time.strftime('%Y%m%d_%H%M%S')}_{interaction_count}"
+                            # Add microseconds to ensure uniqueness even in rapid succession
+                            interaction_id = f"{user_id}_{session_id}_snapshot_{snapshot_time.strftime('%Y%m%d_%H%M%S_%f')}_{interaction_count}"
                             
                             cur.execute("""
                                 INSERT INTO interaction_logs 
@@ -392,7 +508,8 @@ def store_session_snapshot_before_summarization(user_id: str, session_id: str, r
                                  rag_context, strategy, model, tools_called,
                                  user_id, session_id)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                ON CONFLICT (interaction_id) DO NOTHING
+                                ON CONFLICT (interaction_id) DO UPDATE SET
+                                    created_at = EXCLUDED.created_at
                             """, (
                                 user_id,  # This goes into 'uuid' column which contains user_id values
                                 interaction_id,
