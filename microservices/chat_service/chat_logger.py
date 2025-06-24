@@ -63,12 +63,15 @@ class ChatPipelineLogger:
         print(f"Debug - Persistent memory length: {len(persistent_memory) if persistent_memory else 0}")
         print(f"Debug - RAG context length: {len(rag_context) if rag_context else 0}")
         
+        # Use same timestamp for both logs to ensure matching
+        current_timestamp = datetime.utcnow().isoformat()
+        
         # Prepare interaction log
         interaction_log = {
             "interaction_id": str(uuid.uuid4()),
             "user_id": user_id,
             "session_id": session_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": current_timestamp,
             "user_message": user_message,
             "assistant_response": assistant_response,
             "rag_context": rag_context,
@@ -85,7 +88,7 @@ class ChatPipelineLogger:
         prompt_log = {
             "user_id": user_id,
             "session_id": session_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": current_timestamp,  # Use same timestamp as interaction log
             "system_prompt": system_prompt,
             "persistent_summary": persistent_memory,
             "session_context": session_memory,

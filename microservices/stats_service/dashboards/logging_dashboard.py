@@ -480,9 +480,11 @@ def get_logging_dashboard_content() -> str:
             async function loadPromptDetails(userId, timestamp) {
                 try {
                     console.log(`Loading prompt details for user: ${userId}, timestamp: ${timestamp}`);
-                    const response = await fetch(baseUrl + '/logging/prompts/' + userId + '?limit=10');
+                    const response = await fetch(baseUrl + '/logging/prompts/' + userId + '?limit=20');
                     
                     if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('Failed to fetch prompt details:', response.status, errorText);
                         throw new Error('Failed to fetch prompt details: ' + response.statusText);
                     }
                     
@@ -497,14 +499,15 @@ def get_logging_dashboard_content() -> str:
                     data.prompts.forEach(p => {
                         const promptTime = new Date(p.timestamp).getTime();
                         const diff = Math.abs(promptTime - targetTime);
-                        if (diff < closestDiff && diff < 10000) { // Within 10 seconds
+                        console.log(`Comparing timestamps - Target: ${timestamp}, Prompt: ${p.timestamp}, Diff: ${diff}ms`);
+                        if (diff < closestDiff && diff < 60000) { // Increased to 60 seconds
                             closestDiff = diff;
                             closestPrompt = p;
                         }
                     });
                     
                     if (closestPrompt) {
-                        console.log('Found matching prompt');
+                        console.log(`Found matching prompt with diff: ${closestDiff}ms`);
                         const modalBody = document.getElementById('modal-body');
                         modalBody.innerHTML += `
                             <div class="detail-section">
@@ -537,6 +540,15 @@ def get_logging_dashboard_content() -> str:
                         modalBody.innerHTML += `
                             <div class="detail-section">
                                 <p style="color: #666;">No prompt details found for this interaction.</p>
+                            </div>
+                        `;
+                    } else {
+                        console.log('No matching prompt found within time window');
+                        const modalBody = document.getElementById('modal-body');
+                        modalBody.innerHTML += `
+                            <div class="detail-section">
+                                <p style="color: #ff9800;">No prompt details found for this interaction. The prompt may not have been logged or the timing window exceeded.</p>
+                                <p>Debug info: Searched ${data.prompts.length} prompts within 60 second window.</p>
                             </div>
                         `;
                     }
